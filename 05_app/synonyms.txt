@@ -1,0 +1,36 @@
+# synonyms.txt - groups of words that mean the same thing in procurement notices.
+#
+# One group per line:   word = alternative, alternative, ...
+# Every term in a group matches the others, in either direction. Lowercase.
+# Lines starting with # are ignored. Edits are picked up without restarting.
+# Words of 3 letters or fewer (pc, ink, tv) match whole words only, so "ink"
+# does not match "inkjet" and "pc" does not match "pcs".
+#
+# Built from the item names and descriptions in items.csv. Item names are
+# standard category titles (for example "Notebook computers", "Ink rolls"),
+# while descriptions are free text ("LAPTOPS"), which is why these help.
+# Keep groups tight; review them against your own data.
+
+laptop = notebook, notebook computer, mobile workstation
+desktop = desktop computer, personal computer, pc, all in one computer
+printer = inkjet printer, multi function printer, multifunction printer, mfp
+ink = ink cartridge, ink tank, ink bottle, ink rolls
+toner = toner cartridge, printer toner
+photocopier = copier, copy machine, xerox
+projector = multimedia projector, lcd projector, beamer
+internet = isp, internet service provider, broadband
+monitor = lcd monitor, computer monitor, liquid crystal display, lcd panel
+tv = television, smart tv
+cellphone = mobile phone, cell phone, smartphone
+headset = headphone, headphones
+microphone = mic
+camera = cctv, camcorder, video camera
+drone = aerial camera, uav, quadcopter
+two way radio = walkie talkie, handheld radio
+network cable = lan cable, utp cable, ethernet cable, patch cord
+flash drive = usb drive, thumb drive, pen drive
+hard drive = hdd, hard disk, external hard drive
+ssd = solid state drive
+antivirus = anti virus, endpoint security, virus protection
+generator = genset, generator set
+license = licence

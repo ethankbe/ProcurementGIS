@@ -2,10 +2,10 @@
 """
 load.py - load contracts, agencies and geocoded addresses into MySQL.
 
-Run it from the app folder. It reads three CSV files:
-  contracts.csv           the PhilGEPS download
-  addresses_clean.csv     office_key, clean_address, raw_address
-  geocoded_addresses.csv  clean_address, lat, long, precision
+Run it from the 04_database folder. It reads three CSV files, found by default at:
+  ../02_addresses/contracts.csv          the PhilGEPS download
+  ../02_addresses/addresses_clean.csv    office_key, clean_address, raw_address
+  ../03_geocode/geocoded_addresses.csv   clean_address, lat, long, precision
 
 Try a dry run first. It checks everything and shows how well the files line
 up, without touching the database:
@@ -17,7 +17,8 @@ Then load for real (set the password first):
     export DB_PASS='your-app-password'
     python3 load.py
 
-Options: --data-dir (default ../pipeline/), --host, --user, --db.
+Options: --contracts, --addresses, --coords (file paths), --data-dir (one folder
+holding all three files), --host, --user, --db.
 It is safe to run again: existing rows are updated, not duplicated.
 """
 import argparse
@@ -80,6 +81,9 @@ def main():
     if missing:
         sys.exit("ERROR: contracts.csv is missing columns: %s\nFound: %s"
                  % (missing, list(c.columns)))
+    for col in ("Region", "Province"):
+        if col not in c.columns:
+            c[col] = None
     for col in (BID, AWARD):
         c[col] = c[col].str.replace(r"\.0$", "", regex=True).str.strip()
     c["entity_key"] = (c[PE].fillna("").str.upper().str.strip() + " | " +
@@ -160,7 +164,7 @@ def main():
     addr_rows = a.drop_duplicates("akey")
 
     # ---- coverage report -------------------------------------------------
-    ents = c.drop_duplicates("entity_key")[["entity_key", PE, CITY]]
+    ents = c.drop_duplicates("entity_key")[["entity_key", PE, CITY, "Region", "Province"]]
     has_addr = set(ent_addr["entity_key"])
     n_ent = len(ents)
     n_with_addr = ents["entity_key"].isin(has_addr).sum()
@@ -198,6 +202,12 @@ def main():
     for stmt in open(schema).read().split(";"):
         if stmt.strip():
             cur.execute(stmt)
+    # older databases: add the region and province columns if they are missing
+    for col, ddl in (("region", "VARCHAR(100) NULL"), ("province", "VARCHAR(150) NULL")):
+        cur.execute("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME = 'entities' AND COLUMN_NAME = %s", (col,))
+        if cur.fetchone()[0] == 0:
+            cur.execute("ALTER TABLE entities ADD COLUMN %s %s" % (col, ddl))
 
     cur.executemany(
         """INSERT INTO addresses (clean_address, raw_address, lat, lon, geo_precision)
@@ -214,9 +224,12 @@ def main():
     key_to_akey = dict(zip(ent_addr["entity_key"], ent_addr["akey"]))
 
     cur.executemany(
-        """INSERT INTO entities (entity_key, name, city, address_id) VALUES (%s,%s,%s,%s)
-           ON DUPLICATE KEY UPDATE address_id=VALUES(address_id)""",
-        [(r[0], r[1], r[2], addr_id.get(key_to_akey.get(r[0])))
+        """INSERT INTO entities (entity_key, name, city, region, province, address_id)
+           VALUES (%s,%s,%s,%s,%s,%s)
+           ON DUPLICATE KEY UPDATE address_id=VALUES(address_id), region=VALUES(region),
+                                   province=VALUES(province)""",
+        [(r[0], r[1], r[2], none_if_nan(r[3]), none_if_nan(r[4]),
+          addr_id.get(key_to_akey.get(r[0])))
          for r in ents.itertuples(index=False)])
     con.commit()
 

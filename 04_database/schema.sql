@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS entities (
   id INT AUTO_INCREMENT PRIMARY KEY,
   entity_key VARCHAR(500) NOT NULL,
   name VARCHAR(300), city VARCHAR(150),
+  region VARCHAR(100) NULL, province VARCHAR(150) NULL,
   address_id INT NULL,
   UNIQUE KEY uq_entity_key (entity_key),
   KEY idx_ent_addr (address_id),

@@ -18,7 +18,11 @@ header p { margin: 0; color: var(--muted); }
 .search { padding: 6px 18px 12px; display: grid; gap: 8px; border-bottom: 1px solid var(--line); }
 .search label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 2px; }
 input { width: 100%; padding: 8px 10px; font: inherit; border: 1px solid #b8c2ce; border-radius: 6px; background: #fff; color: var(--ink); }
-input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+select { width: 100%; padding: 7px 6px; font: inherit; border: 1px solid #b8c2ce; border-radius: 6px; background: #fff; color: var(--ink); }
+details.filters summary { cursor: pointer; font-weight: 600; padding: 2px 0; }
+.fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.fgrid .wide { grid-column: 1 / -1; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .hint { font-size: 12px; color: var(--muted); margin-top: 2px; }
 #status { padding: 8px 18px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); min-height: 36px; }
 #list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
@@ -77,17 +81,30 @@ main { position: relative; min-height: 0; }
     <div class="search">
       <div>
         <label for="item">Item</label>
-        <input id="item" type="search" placeholder="laptop" autocomplete="off">
+        <input id="item" type="search" list="itemlist" placeholder="laptop" autocomplete="off">
+        <datalist id="itemlist"></datalist>
         <div class="hint">Separate alternatives with commas: laptop, notebook computer</div>
       </div>
-      <div>
-        <label for="q">Agency name</label>
-        <input id="q" type="search" placeholder="Pasig" autocomplete="off">
-      </div>
-      <div>
-        <label for="minb">Minimum total budget (PHP)</label>
-        <input id="minb" type="number" min="0" step="100000" placeholder="0">
-      </div>
+      <details class="filters" open>
+        <summary>Filters <span id="fcount"></span></summary>
+        <div class="fgrid">
+          <div><label for="f-region">Region</label><select id="f-region"></select></div>
+          <div><label for="f-province">Province</label><select id="f-province"></select></div>
+          <div class="wide"><label for="f-city">City or municipality</label><select id="f-city"></select></div>
+          <div><label for="f-category">Category</label><select id="f-category"></select></div>
+          <div><label for="f-status">Status</label><select id="f-status"></select></div>
+          <div class="wide">
+            <label for="q">Agency</label>
+            <input id="q" type="search" list="agencylist" placeholder="Type or pick from the list" autocomplete="off">
+            <datalist id="agencylist"></datalist>
+          </div>
+          <div class="wide">
+            <label for="minb">Minimum total budget (PHP)</label>
+            <input id="minb" type="number" min="0" step="100000" placeholder="0">
+          </div>
+        </div>
+        <button class="btn ghost" id="clearF" type="button">Clear filters</button>
+      </details>
     </div>
     <div id="status" role="status" aria-live="polite">Loading locations...</div>
     <ol id="list"></ol>
@@ -157,9 +174,8 @@ const refLine = (ref, right, text) =>
   `<span class="amt">${right}</span></div><div class="t">${text}</div></li>`;
 
 async function loadAgencies() {
-  const params = new URLSearchParams();
-  const q = $("q").value.trim(), mb = $("minb").value;
-  if (q) params.set("q", q);
+  const params = filterParams(false);
+  const mb = $("minb").value;
   if (mb) params.set("min_budget", mb);
   const res = await fetch("/api/pins?" + params);
   if (!res.ok) throw new Error("bad response");
@@ -171,7 +187,7 @@ async function loadAgencies() {
     async p => {
       const el = $(`refs-${p.id}`);
       try {
-        const r = await fetch(`/api/pins/${p.id}/contracts?limit=10`);
+        const r = await fetch(`/api/pins/${p.id}/contracts?limit=10&${filterParams(false)}`);
         const rows = r.ok ? await r.json() : [];
         el.innerHTML = rows.length
           ? rows.map(x => refLine(x.bid_ref, peso(x.abc) + (x.derived ? ' <small title="Contract budget was blank; this is the sum of its item budgets">from items</small>' : ""), esc(x.title))).join("") +
@@ -185,11 +201,11 @@ async function loadAgencies() {
     (a, b) => b.total_budget - a.total_budget);
   const n = data.features.length;
   $("status").textContent = n ? `${n} location${n === 1 ? "" : "s"}, largest total budget first.`
-    : "No agencies match. Check the spelling or lower the minimum budget.";
+    : "No agencies match. Clear a filter, check the spelling, or lower the minimum budget.";
 }
 
 async function loadItems(itemQ) {
-  const res = await fetch("/api/items/pins?q=" + encodeURIComponent(itemQ));
+  const res = await fetch("/api/items/pins?q=" + encodeURIComponent(itemQ) + "&" + filterParams(true));
   if (!res.ok) { $("status").textContent = "Type at least 2 characters to search items."; return; }
   const data = await res.json();
   render(data,
@@ -204,7 +220,7 @@ async function loadItems(itemQ) {
       if (b) b.onclick = () => addCompare(p);
       const el = $(`refs-${p.id}`);
       try {
-        const r = await fetch(`/api/items/compare?q=${encodeURIComponent(itemQ)}&a=${p.id}&b=0`);
+        const r = await fetch(`/api/items/compare?q=${encodeURIComponent(itemQ)}&a=${p.id}&b=0&${filterParams(true)}`);
         const d = r.ok ? await r.json() : null;
         const lines = d ? d.a.lines : [];
         el.innerHTML = lines.length
@@ -236,6 +252,59 @@ async function refresh() {
 }
 const later = () => { clearTimeout(timer); timer = setTimeout(refresh, 350); };
 ["item", "q", "minb"].forEach(id => $(id).addEventListener("input", later));
+
+// ---- filters built from the masterlists in /api/filters --------------------
+let FILTERS = null;
+const SEL = {region: "f-region", province: "f-province", city: "f-city", category: "f-category", status: "f-status"};
+function filterParams(forItems) {
+  const p = new URLSearchParams();
+  for (const [k, id] of Object.entries(SEL)) { const v = $(id).value; if (v) p.set(k, v); }
+  const a = $("q").value.trim();
+  if (a) {
+    if (FILTERS && FILTERS.agencies.some(x => x.name === a)) p.set("agency", a);   // picked from the list
+    else if (!forItems) p.set("q", a);                                               // typed text: partial match
+  }
+  return p;
+}
+function fillFilters() {
+  const F = FILTERS, r = $("f-region").value, pr = $("f-province").value, c = $("f-city").value;
+  const opts = (list, label) => `<option value="">${label}</option>` +
+    list.map(x => `<option value="${esc(x.name)}">${esc(x.name)} (${x.n})</option>`).join("");
+  const keep = (id, html) => { const s = $(id), v = s.value; s.innerHTML = html;
+    if ([...s.options].some(o => o.value === v)) s.value = v; };
+  keep("f-region", opts(F.regions, "All regions"));
+  keep("f-province", opts(F.provinces.filter(x => !r || x.region === r), "All provinces"));
+  keep("f-city", opts(F.cities.filter(x => (!r || x.region === r) && (!pr || x.province === pr)), "All cities"));
+  keep("f-category", opts(F.categories, "All categories"));
+  keep("f-status", opts(F.statuses, "All statuses"));
+  $("agencylist").innerHTML = F.agencies
+    .filter(x => (!r || x.region === r) && (!pr || x.province === pr) && (!c || x.city === c))
+    .map(x => `<option value="${esc(x.name)}"></option>`).join("");
+}
+function countFilters() {
+  const n = Object.values(SEL).filter(id => $(id).value).length + ($("q").value.trim() ? 1 : 0) + ($("minb").value ? 1 : 0);
+  $("fcount").textContent = n ? `(${n} active)` : "";
+}
+Object.values(SEL).forEach(id => $(id).addEventListener("change", () => { fillFilters(); countFilters(); later(); }));
+["q", "minb"].forEach(id => $(id).addEventListener("input", countFilters));
+$("clearF").onclick = () => {
+  Object.values(SEL).forEach(id => { $(id).value = ""; });
+  $("q").value = ""; $("minb").value = "";
+  if (FILTERS) fillFilters();
+  countFilters(); later();
+};
+let sugTimer = null;
+$("item").addEventListener("input", () => {
+  clearTimeout(sugTimer);
+  const v = $("item").value.trim();
+  if (v.length < 2) return;
+  sugTimer = setTimeout(async () => {
+    try {
+      const r = await fetch("/api/items/suggest?q=" + encodeURIComponent(v));
+      if (r.ok) $("itemlist").innerHTML = (await r.json()).map(x => `<option value="${esc(x)}">`).join("");
+    } catch {}
+  }, 200);
+});
 
 $("list").addEventListener("click", e => {
   const c = e.target.closest(".cmpbtn");
@@ -272,7 +341,7 @@ function drawTray() {
 async function showCompare() {
   const itemQ = $("item").value.trim();
   if (selected.length < 2 || !itemQ) return;
-  const res = await fetch(`/api/items/compare?q=${encodeURIComponent(itemQ)}&a=${selected[0].id}&b=${selected[1].id}`);
+  const res = await fetch(`/api/items/compare?q=${encodeURIComponent(itemQ)}&a=${selected[0].id}&b=${selected[1].id}&${filterParams(true)}`);
   if (!res.ok) return;
   const d = await res.json(), A = d.a, B = d.b;
   const lo = (x, y) => (x != null && y != null && x < y) ? "low" : "";
@@ -311,7 +380,9 @@ async function showCompare() {
 }
 document.addEventListener("keydown", e => { if (e.key === "Escape") $("cmp").hidden = true; });
 
-refresh();
+fetch("/api/filters").then(r => r.ok ? r.json() : null)
+  .then(f => { if (f) { FILTERS = f; fillFilters(); } })
+  .catch(() => {}).finally(refresh);
 </script>
 </body>
 </html>
