@@ -50,35 +50,38 @@ let layer = null, markers = {}, props = {}, selected = [], fitNext = true, lastM
 
 
 // --- Core Rendering Logic ---
-// --- Core Rendering Logic ---
 function render(data, popupFn, onOpen, rowFn, sortFn) {
     if (layer) layer.remove();
     markers = {}; props = {};
     
-    // Find min and max median unit prices for color-coding when items are searched
-    let minPrice = Infinity, maxPrice = -Infinity;
+    // Find the global lowest min_unit and highest max_unit across all matching locations
+    let globalMin = Infinity, globalMax = -Infinity;
     if ($("item").value.trim()) {
         data.features.forEach(f => {
-            const m = f.properties.median_unit;
-            if (m != null && m > 0) {
-                if (m < minPrice) minPrice = m;
-                if (m > maxPrice) maxPrice = m;
+            const p = f.properties;
+            if (p.min_unit != null && p.min_unit > 0 && p.min_unit < globalMin) {
+                globalMin = p.min_unit;
+            }
+            if (p.max_unit != null && p.max_unit > 0 && p.max_unit > globalMax) {
+                globalMax = p.max_unit;
             }
         });
     }
 
-    // Create GeoJSON layer with dynamic pricing colors
+    // Create GeoJSON layer with item-level pricing colors
     layer = L.geoJSON(data, {
         pointToLayer: (f, ll) => {
             const p = f.properties;
             let markerStyle = { ...BASE };
             
-            // Apply green for lowest price, red for highest price when searching items
-            if ($("item").value.trim() && p.median_unit != null) {
-                if (p.median_unit === minPrice && minPrice !== maxPrice) {
-                    markerStyle.fillColor = "#16a34a"; // Green for lowest
-                } else if (p.median_unit === maxPrice && minPrice !== maxPrice) {
-                    markerStyle.fillColor = "#dc2626"; // Red for highest
+            if ($("item").value.trim() && globalMin !== globalMax) {
+                // If this location's lowest item matches the global minimum -> Green
+                if (p.min_unit != null && p.min_unit === globalMin) {
+                    markerStyle.fillColor = "#16a34a"; 
+                } 
+                // If this location's highest item matches the global maximum -> Red
+                else if (p.max_unit != null && p.max_unit === globalMax) {
+                    markerStyle.fillColor = "#dc2626"; 
                 }
             }
             return L.circleMarker(ll, markerStyle);
@@ -90,11 +93,10 @@ function render(data, popupFn, onOpen, rowFn, sortFn) {
             l.bindPopup(popupFn(p), {minWidth: 260, maxWidth: 340});
             l.on("popupopen", () => { l.setStyle(ACTIVE); onOpen(p); });
             l.on("popupclose", () => {
-                // Restore proper color on close
                 let resetColor = BASE.fillColor;
-                if ($("item").value.trim() && p.median_unit != null) {
-                    if (p.median_unit === minPrice && minPrice !== maxPrice) resetColor = "#16a34a";
-                    else if (p.median_unit === maxPrice && minPrice !== maxPrice) resetColor = "#dc2626";
+                if ($("item").value.trim() && globalMin !== globalMax) {
+                    if (p.min_unit != null && p.min_unit === globalMin) resetColor = "#16a34a";
+                    else if (p.max_unit != null && p.max_unit === globalMax) resetColor = "#dc2626";
                 }
                 l.setStyle({ ...BASE, fillColor: resetColor });
             });
@@ -556,28 +558,3 @@ function updateDataDate() {
 }
 
 updateDataDate();
-
-// --- Clear Search Button Logic ---
-const itemInput = $("item");
-const clearBtn = $("clear-search");
-
-if (itemInput && clearBtn) {
-    // Show or hide the "X" button whenever the user types
-    itemInput.addEventListener("input", () => {
-        clearBtn.style.display = itemInput.value.trim().length > 0 ? "block" : "none";
-    });
-
-    // When the user clicks the "X" button
-    clearBtn.addEventListener("click", () => {
-        itemInput.value = "";           // Clear the text
-        clearBtn.style.display = "none"; // Hide the button
-        itemInput.focus();              // Keep focus on the search box
-        
-        // Refresh the map / list view back to default agencies or cleared search
-        if (typeof later === "function") {
-            later();
-        } else if (typeof refresh === "function") {
-            refresh();
-        }
-    });
-}
