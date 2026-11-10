@@ -1,0 +1,2 @@
+office_key,bid_ref,award_no,entity_name,raw_address,ref_match,status,clean_address
+CITY OF PASIG | HUMAN  RESOURCE DEVELOPMENT OFFICE | PASIG CITY,50850,22316,CITY OF PASIG,"Temporary City Hall, Eulogio Amang Rodriguez Ave., Brgy. Rosario, Pasig City, Pasig City, Metro Manila",TRUE,ok,"Temporary City Hall, Eulogio Amang Rodriguez Ave., Barangay Rosario, Pasig City, Metro Manila, Philippines"

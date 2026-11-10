@@ -1,0 +1,14 @@
+# Python environment and caches
+venv/
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Secrets (never commit passwords)
+.env
+
+# Editor and system files
+.DS_Store
+.idea/
+.vscode/

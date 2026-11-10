@@ -1,0 +1,9 @@
+requests
+beautifulsoup4
+pandas
+pymysql
+fastapi
+uvicorn
+
+# only if you open the notebook in 01_prepare:
+# notebook
