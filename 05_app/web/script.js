@@ -1,0 +1,389 @@
+/**
+ * Procurement Price Monitoring System
+ * Handles Map UI, PhilGEPS API fetching, and filtering logic.
+ */
+
+// --- Utility Functions ---
+const $ = id => document.getElementById(id);
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g,
+    c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])
+);
+
+const peso = n => {
+    if (n == null) return "n/a";
+    const d = Math.abs(n) < 100 ? 2 : 0;
+    return "PHP " + Number(n).toLocaleString("en-PH", {minimumFractionDigits: d, maximumFractionDigits: d});
+};
+
+const num = n => n == null ? "n/a" : Number(n).toLocaleString("en-PH", {maximumFractionDigits: 2});
+
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+
+// --- Map Initialization & Styling ---
+const BASE = {radius: 8, color: "#2563eb", weight: 2, fillOpacity: .55}; 
+const ACTIVE = {radius: 11, color: "#ef4444", weight: 3, fillOpacity: .8}; 
+
+// Initialize map centered on the Philippines
+const map = L.map("map").setView([12.8797, 121.7740], 6); 
+
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, 
+    attribution: "&copy; OpenStreetMap contributors"
+}).addTo(map);
+
+let layer = null, markers = {}, props = {}, selected = [], fitNext = true, lastMode = "", timer = null;
+
+
+// --- Core Rendering Logic ---
+function render(data, popupFn, onOpen, rowFn, sortFn) {
+    if (layer) layer.remove();
+    markers = {}; props = {};
+    
+    // Create GeoJSON layer
+    layer = L.geoJSON(data, {
+        pointToLayer: (f, ll) => L.circleMarker(ll, BASE),
+        onEachFeature: (f, l) => {
+            const p = f.properties;
+            markers[p.id] = l; 
+            props[p.id] = p;
+            l.bindPopup(popupFn(p), {minWidth: 260, maxWidth: 340});
+            l.on("popupopen", () => { l.setStyle(ACTIVE); onOpen(p); });
+            l.on("popupclose", () => l.setStyle(BASE));
+        }
+    }).addTo(map);
+
+    // Update the right sidebar list
+    const rows = data.features.map(f => f.properties).sort(sortFn);
+    $("list").innerHTML = rows.map(rowFn).join("");
+    
+    markCompare();
+    
+    // Adjust map bounds to fit new data
+    if (fitNext && rows.length) {
+        fitNext = false;
+        map.fitBounds(layer.getBounds().pad(.2), {maxZoom: 15});
+    }
+}
+
+function focusLoc(id) {
+    const m = markers[id];
+    if (!m) return;
+    const z = Math.max(map.getZoom(), 14);
+    if (reduce) map.setView(m.getLatLng(), z); 
+    else map.flyTo(m.getLatLng(), z, {duration: .6});
+    m.openPopup();
+}
+
+const refLine = (ref, right, text) =>
+    `<li><div class="top"><span class="ref" title="Bid reference number">${esc(ref)}</span>` +
+    `<span class="amt">${right}</span></div><div class="t">${text}</div></li>`;
+
+
+// --- Data Fetching (Agencies & Items) ---
+async function loadAgencies() {
+    const params = filterParams(false);
+    const mb = $("minInput").value; 
+    if (mb) params.set("min_budget", mb);
+    
+    const res = await fetch("/api/pins?" + params);
+    if (!res.ok) throw new Error("bad response");
+    const data = await res.json();
+    
+    render(data,
+        p => `<div class="pop"><h2>${esc(p.entities)}</h2><div class="addr">${esc(p.address)}</div>` +
+             `<dl><dt>Contracts</dt><dd>${p.contracts}</dd><dt>Total budget</dt><dd>${peso(p.total_budget)}</dd>` +
+             `<dt>Location</dt><dd>${esc(p.precision)}</dd></dl><ul class="refs" id="refs-${p.id}"><li class="more">Loading contracts...</li></ul></div>`,
+        async p => {
+            const el = $(`refs-${p.id}`);
+            try {
+                const r = await fetch(`/api/pins/${p.id}/contracts?limit=10&${filterParams(false)}`);
+                const rows = r.ok ? await r.json() : [];
+                el.innerHTML = rows.length
+                    ? rows.map(x => refLine(x.bid_ref, peso(x.abc) + (x.derived ? ' <small title="Contract budget was blank; this is the sum of its item budgets">from items</small>' : ""), esc(x.title))).join("") +
+                      (p.contracts > rows.length ? `<li class="more">Showing ${rows.length} of ${p.contracts} contracts</li>` : "")
+                    : `<li class="more">No contracts to show.</li>`;
+            } catch { el.innerHTML = `<li class="more">Could not load contracts.</li>`; }
+        },
+        p => `<li><button class="row" data-id="${p.id}"><span class="name">${esc(p.entities)}</span>` +
+             `<span class="addr">${esc(p.address)}</span>` +
+             `<span class="meta"><b>${p.contracts}</b> contracts, ${peso(p.total_budget)}</span></button></li>`,
+        (a, b) => b.total_budget - a.total_budget
+    );
+    
+    const n = data.features.length;
+    $("status").innerHTML = n ? `<b>Overall Summary</b><br><span style="color:#64748b; font-size:12px">${n} location${n === 1 ? "" : "s"} found</span>`
+        : "No agencies match. Clear a filter or adjust criteria.";
+}
+
+async function loadItems(itemQ) {
+    const res = await fetch("/api/items/pins?q=" + encodeURIComponent(itemQ) + "&" + filterParams(true));
+    if (!res.ok) { $("status").textContent = "Type at least 2 characters to search items."; return; }
+    const data = await res.json();
+    
+    render(data,
+        p => `<div class="pop"><h2>${esc(p.entities)}</h2><div class="addr">${esc(p.address)}</div>` +
+             `<dl><dt>Matching items</dt><dd>${p.n_items}${p.total_qty ? ` (${num(p.total_qty)} units)` : ""}</dd>` +
+             (p.n_comparable ? `<dt>Per unit</dt><dd>${peso(p.min_unit)} to ${peso(p.max_unit)}</dd><dt>Median</dt><dd>${peso(p.median_unit)}</dd>`
+                             : `<dt>Per unit</dt><dd>not available</dd>`) + `</dl>` +
+             `<ul class="refs" id="refs-${p.id}"><li class="more">Loading items...</li></ul>` +
+             `<button class="btn" id="cmp-${p.id}" style="width:100%; margin-top:10px;">Add to comparison</button></div>`,
+        async p => {
+            const b = $(`cmp-${p.id}`);
+            if (b) b.onclick = () => addCompare(p);
+            const el = $(`refs-${p.id}`);
+            try {
+                const r = await fetch(`/api/items/compare?q=${encodeURIComponent(itemQ)}&a=${p.id}&b=0&${filterParams(true)}`);
+                const d = r.ok ? await r.json() : null;
+                const lines = d ? d.a.lines : [];
+                el.innerHTML = lines.length
+                    ? lines.slice(0, 10).map(l => refLine(l.bid_ref, l.comparable ? peso(l.unit_budget) + " each" : (l.item_budget != null ? peso(l.item_budget) + " total" : "n/a"),
+                        `${esc(l.item)}, ${num(l.quantity)} ${esc(l.uom || "")}`)).join("") +
+                      (lines.length > 10 ? `<li class="more">Showing 10 of ${lines.length} items</li>` : "")
+                    : `<li class="more">No items to show.</li>`;
+            } catch { el.innerHTML = `<li class="more">Could not load items.</li>`; }
+        },
+        p => `<li><button class="row" data-id="${p.id}"><span class="name">${esc(p.entities)}</span>` +
+             `<span class="addr">${esc(p.address)}</span>` +
+             `<span class="meta"><b>${p.n_items}</b> item${p.n_items === 1 ? "" : "s"}, ` +
+             (p.n_comparable ? `median ${peso(p.median_unit)} per unit` : "no per-unit price") + `</span></button>` +
+             `<button class="cmpbtn" data-id="${p.id}">Compare Location</button></li>`,
+        (a, b) => (a.median_unit ?? Infinity) - (b.median_unit ?? Infinity)
+    );
+    
+    const n = data.features.length;
+    $("status").innerHTML = n
+        ? `<b>Results for "${itemQ}"</b><br><span style="color:#64748b; font-size:12px">${n} location${n === 1 ? "" : "s"} found</span>` +
+          (data.truncated ? "<br><small style='color:var(--hot)'>Results capped; try being more specific.</small>" : "")
+        : `No purchases found for "${itemQ}".`;
+}
+
+async function refresh() {
+    const itemQ = $("item").value.trim();
+    const mode = itemQ ? "item:" + itemQ : "agency";
+    if (mode !== lastMode) { fitNext = true; lastMode = mode; }
+    try { 
+        await (itemQ ? loadItems(itemQ) : loadAgencies()); 
+    } catch { 
+        $("status").textContent = "Could not reach the server. Check that it is running."; 
+    }
+}
+
+const later = () => { clearTimeout(timer); timer = setTimeout(refresh, 350); };
+
+
+// --- Filters Handling ---
+let FILTERS = null;
+const SEL = {region: "f-region", province: "f-province", city: "f-city", category: "f-category", status: "f-status"};
+
+function filterParams(forItems) {
+    const p = new URLSearchParams();
+    for (const [k, id] of Object.entries(SEL)) { 
+        const v = $(id).value; 
+        if (v) p.set(k, v); 
+    }
+    const a = $("q").value.trim();
+    if (a) {
+        if (FILTERS && FILTERS.agencies.some(x => x.name === a)) p.set("agency", a);
+        else if (!forItems) p.set("q", a);
+    }
+    return p;
+}
+
+function fillFilters() {
+    const F = FILTERS, r = $("f-region").value, pr = $("f-province").value, c = $("f-city").value;
+    const opts = (list, label) => `<option value="">${label}</option>` +
+        list.map(x => `<option value="${esc(x.name)}">${esc(x.name)} (${x.n})</option>`).join("");
+    
+    const keep = (id, html) => { 
+        const s = $(id), v = s.value; s.innerHTML = html;
+        if ([...s.options].some(o => o.value === v)) s.value = v; 
+    };
+    
+    keep("f-region", opts(F.regions, "All regions"));
+    keep("f-province", opts(F.provinces.filter(x => !r || x.region === r), "All provinces"));
+    keep("f-city", opts(F.cities.filter(x => (!r || x.region === r) && (!pr || x.province === pr)), "All cities"));
+    keep("f-category", opts(F.categories, "All categories"));
+    keep("f-status", opts(F.statuses, "All statuses"));
+    
+    $("agencylist").innerHTML = F.agencies
+        .filter(x => (!r || x.region === r) && (!pr || x.province === pr) && (!c || x.city === c))
+        .map(x => `<option value="${esc(x.name)}"></option>`).join("");
+}
+
+function countFilters() {
+    const n = Object.values(SEL).filter(id => $(id).value).length + ($("q").value.trim() ? 1 : 0) + ($("minInput").value !== "1000" ? 1 : 0);
+    $("fcount").textContent = n ? `(${n} active)` : "";
+}
+
+// Event Listeners for Filters
+Object.values(SEL).forEach(id => $(id).addEventListener("change", () => { fillFilters(); countFilters(); later(); }));
+["q"].forEach(id => $(id).addEventListener("input", countFilters));
+$("clearF").onclick = () => {
+    Object.values(SEL).forEach(id => { $(id).value = ""; });
+    $("q").value = ""; 
+    // Reset Price range
+    $("minInput").value = "1000"; $("maxInput").value = "10000000";
+    $("minb").value = "1000"; $("maxb").value = "10000000";
+    updatePriceRange("min");
+    
+    if (FILTERS) fillFilters();
+    countFilters(); 
+    later();
+};
+if($("applyF")) $("applyF").addEventListener("click", refresh);
+
+// Typeahead for Items
+let sugTimer = null;
+$("item").addEventListener("input", () => {
+    clearTimeout(sugTimer);
+    later(); // Also trigger standard refresh
+    const v = $("item").value.trim();
+    if (v.length < 2) return;
+    sugTimer = setTimeout(async () => {
+        try {
+            const r = await fetch("/api/items/suggest?q=" + encodeURIComponent(v));
+            if (r.ok) $("itemlist").innerHTML = (await r.json()).map(x => `<option value="${esc(x)}">`).join("");
+        } catch {}
+    }, 200);
+});
+
+$("list").addEventListener("click", e => {
+    const c = e.target.closest(".cmpbtn");
+    if (c) return addCompare(props[c.dataset.id]);
+    const r = e.target.closest(".row");
+    if (r) focusLoc(+r.dataset.id);
+});
+
+
+// --- Location Comparison Logic ---
+function addCompare(p) {
+    if (!p) return;
+    const i = selected.findIndex(s => s.id === p.id);
+    if (i >= 0) selected.splice(i, 1);
+    else { selected.push({id: p.id, entities: p.entities}); if (selected.length > 2) selected.shift(); }
+    drawTray(); markCompare();
+}
+
+function markCompare() {
+    document.querySelectorAll(".cmpbtn").forEach(b => {
+        const on = selected.some(s => String(s.id) === b.dataset.id);
+        b.classList.toggle("on", on); b.textContent = on ? "Selected" : "Compare Location";
+    });
+}
+
+function drawTray() {
+    const t = $("tray");
+    t.style.display = selected.length ? "flex" : "none";
+    if (!selected.length) return;
+    t.innerHTML = `<span>${selected.map(s => `<b>${esc(s.entities)}</b>`).join(" and ")}` +
+        (selected.length < 2 ? ", pick one more" : "") + `</span>` +
+        `<button class="btn" id="goCmp" ${selected.length < 2 ? "disabled" : ""}>Compare</button>` +
+        `<button class="btn ghost" id="clrCmp" style="background:transparent; color:white; border:none; padding:0;">Clear</button>`;
+    
+    $("clrCmp").onclick = () => { selected = []; drawTray(); markCompare(); };
+    $("goCmp").onclick = showCompare;
+}
+
+async function showCompare() {
+    const itemQ = $("item").value.trim();
+    if (selected.length < 2 || !itemQ) return;
+    
+    const res = await fetch(`/api/items/compare?q=${encodeURIComponent(itemQ)}&a=${selected[0].id}&b=${selected[1].id}&${filterParams(true)}`);
+    if (!res.ok) return;
+    
+    const d = await res.json(), A = d.a, B = d.b;
+    const lo = (x, y) => (x != null && y != null && x < y) ? "low" : "";
+    const row = (label, x, y, fmt, hi) =>
+        `<tr><td>${label}</td><td class="num ${hi ? lo(x, y) : ""}">${fmt(x)}</td><td class="num ${hi ? lo(y, x) : ""}">${fmt(y)}</td></tr>`;
+    
+    let diff = "";
+    if (A.median_unit != null && B.median_unit != null && A.median_unit !== B.median_unit) {
+        const lower = A.median_unit < B.median_unit ? A : B, higher = lower === A ? B : A;
+        const pct = (higher.median_unit - lower.median_unit) / lower.median_unit * 100;
+        diff = `<p style="padding:15px; background:var(--bg); border-radius:8px;">The median budget per unit is <b>${pct.toFixed(0)}% higher</b> at ${esc(higher.entities.join("; "))} than at ${esc(lower.entities.join("; "))}.</p>`;
+    }
+    
+    const lines = X => X.lines.length
+        ? `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;"><tr><th style="padding:8px; border-bottom:1px solid var(--line);">Item</th><th style="padding:8px; border-bottom:1px solid var(--line);">Qty</th><th style="padding:8px; border-bottom:1px solid var(--line);">Per unit</th></tr>` +
+          X.lines.slice(0, 15).map(l => `<tr><td style="padding:8px; border-bottom:1px solid var(--line);">${esc(l.item)}<br><span style="font-size:11px; color:var(--muted);">${esc(l.bid_ref)}</span></td><td style="padding:8px; border-bottom:1px solid var(--line);">${num(l.quantity)}</td>` +
+          `<td style="padding:8px; border-bottom:1px solid var(--line);">${l.comparable ? peso(l.unit_budget) : (l.item_budget != null ? peso(l.item_budget) : "n/a")}</td></tr>`).join("") + "</table>"
+        : "<p>No matching items.</p>";
+        
+    const c = $("cmp");
+    c.hidden = false;
+    c.innerHTML = `<button class="btn ghost" id="closeCmp" style="float:right">Close</button><h2 style="margin-top:0">Comparing "${esc(itemQ)}"</h2>` +
+        `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left; margin-bottom:20px;"><tr><th></th><th style="padding:10px;">${esc(A.entities.join("; ") || "A")}</th><th style="padding:10px;">${esc(B.entities.join("; ") || "B")}</th></tr>` +
+        row("Lowest per unit", A.min_unit, B.min_unit, peso, true) +
+        row("Median per unit", A.median_unit, B.median_unit, peso, true) +
+        row("Highest per unit", A.max_unit, B.max_unit, peso, true) + `</table>${diff}` +
+        `<h3 style="font-size:14px; margin-top:20px;">${esc(A.entities.join("; "))}</h3>${lines(A)}<h3 style="font-size:14px; margin-top:20px;">${esc(B.entities.join("; "))}</h3>${lines(B)}`;
+        
+    $("closeCmp").focus();
+    $("closeCmp").onclick = () => { c.hidden = true; };
+}
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("cmp").hidden = true; });
+
+
+// --- Initialization Call ---
+fetch("/api/filters").then(r => r.ok ? r.json() : null)
+    .then(f => { if (f) { FILTERS = f; fillFilters(); } })
+    .catch(() => {}).finally(refresh);
+
+
+// --- Price Range Slider Logic ---
+const minSlider = $("minb");
+const maxSlider = $("maxb");
+const minInput = $("minInput");
+const maxInput = $("maxInput");
+
+function updatePriceRange(source) {
+    let min = Number(minSlider.value);
+    let max = Number(maxSlider.value);
+
+    // Prevent sliders from crossing over
+    if (min > max) {
+        if (source === "min") {
+            min = max;
+            minSlider.value = min;
+        } else {
+            max = min;
+            maxSlider.value = max;
+        }
+    }
+
+    // Sync manual inputs
+    minInput.value = min;
+    maxInput.value = max;
+
+    // Update UI Labels
+    $("minLabel").textContent = "₱" + min.toLocaleString("en-PH");
+    $("maxLabel").textContent = max >= 10000000
+            ? "₱10,000,000+"
+            : "₱" + max.toLocaleString("en-PH");
+            
+    // Trigger map refresh and count update
+    countFilters();
+    later();
+}
+
+minSlider.addEventListener("input", () => updatePriceRange("min"));
+maxSlider.addEventListener("input", () => updatePriceRange("max"));
+
+minInput.addEventListener("change", () => {
+    minSlider.value = Math.min(
+        10000000,
+        Math.max(1000, Number(minInput.value) || 1000)
+    );
+    updatePriceRange("min");
+});
+
+maxInput.addEventListener("change", () => {
+    maxSlider.value = Math.min(
+        10000000,
+        Math.max(1000, Number(maxInput.value) || 1000)
+    );
+    updatePriceRange("max");
+});
