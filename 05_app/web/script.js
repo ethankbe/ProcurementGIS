@@ -34,7 +34,7 @@ const ACTIVE = {
     radius: 11,
     color: "#ffffff",
     weight: 2,
-    fillColor: "#ef4444",
+    fillColor: "#f59e0b", // Amber/Orange so it never clashes with green or red price tags
     fillOpacity: 1
 };
 
@@ -50,20 +50,54 @@ let layer = null, markers = {}, props = {}, selected = [], fitNext = true, lastM
 
 
 // --- Core Rendering Logic ---
+// --- Core Rendering Logic ---
 function render(data, popupFn, onOpen, rowFn, sortFn) {
     if (layer) layer.remove();
     markers = {}; props = {};
     
-    // Create GeoJSON layer
+    // Find min and max median unit prices for color-coding when items are searched
+    let minPrice = Infinity, maxPrice = -Infinity;
+    if ($("item").value.trim()) {
+        data.features.forEach(f => {
+            const m = f.properties.median_unit;
+            if (m != null && m > 0) {
+                if (m < minPrice) minPrice = m;
+                if (m > maxPrice) maxPrice = m;
+            }
+        });
+    }
+
+    // Create GeoJSON layer with dynamic pricing colors
     layer = L.geoJSON(data, {
-        pointToLayer: (f, ll) => L.circleMarker(ll, BASE),
+        pointToLayer: (f, ll) => {
+            const p = f.properties;
+            let markerStyle = { ...BASE };
+            
+            // Apply green for lowest price, red for highest price when searching items
+            if ($("item").value.trim() && p.median_unit != null) {
+                if (p.median_unit === minPrice && minPrice !== maxPrice) {
+                    markerStyle.fillColor = "#16a34a"; // Green for lowest
+                } else if (p.median_unit === maxPrice && minPrice !== maxPrice) {
+                    markerStyle.fillColor = "#dc2626"; // Red for highest
+                }
+            }
+            return L.circleMarker(ll, markerStyle);
+        },
         onEachFeature: (f, l) => {
             const p = f.properties;
             markers[p.id] = l; 
             props[p.id] = p;
             l.bindPopup(popupFn(p), {minWidth: 260, maxWidth: 340});
             l.on("popupopen", () => { l.setStyle(ACTIVE); onOpen(p); });
-            l.on("popupclose", () => l.setStyle(BASE));
+            l.on("popupclose", () => {
+                // Restore proper color on close
+                let resetColor = BASE.fillColor;
+                if ($("item").value.trim() && p.median_unit != null) {
+                    if (p.median_unit === minPrice && minPrice !== maxPrice) resetColor = "#16a34a";
+                    else if (p.median_unit === maxPrice && minPrice !== maxPrice) resetColor = "#dc2626";
+                }
+                l.setStyle({ ...BASE, fillColor: resetColor });
+            });
         }
     }).addTo(map);
 
@@ -418,6 +452,7 @@ async function showCompare() {
     $("closeCmp").focus();
     $("closeCmp").onclick = () => { c.hidden = true; };
 }
+
 document.addEventListener("keydown", e => { if (e.key === "Escape") $("cmp").hidden = true; });
 
 
@@ -521,3 +556,28 @@ function updateDataDate() {
 }
 
 updateDataDate();
+
+// --- Clear Search Button Logic ---
+const itemInput = $("item");
+const clearBtn = $("clear-search");
+
+if (itemInput && clearBtn) {
+    // Show or hide the "X" button whenever the user types
+    itemInput.addEventListener("input", () => {
+        clearBtn.style.display = itemInput.value.trim().length > 0 ? "block" : "none";
+    });
+
+    // When the user clicks the "X" button
+    clearBtn.addEventListener("click", () => {
+        itemInput.value = "";           // Clear the text
+        clearBtn.style.display = "none"; // Hide the button
+        itemInput.focus();              // Keep focus on the search box
+        
+        // Refresh the map / list view back to default agencies or cleared search
+        if (typeof later === "function") {
+            later();
+        } else if (typeof refresh === "function") {
+            refresh();
+        }
+    });
+}

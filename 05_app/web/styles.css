@@ -671,6 +671,40 @@ select {
     letter-spacing: 0.3px;
 }
 
+/* Container to hold the input and absolute-positioned clear button */
+.search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+/* The X clear button styling */
+.clear-search-btn {
+    position: absolute;
+    right: 10px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 0.2s;
+}
+
+.clear-search-btn:hover {
+    color: #0f172a;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* Give the input extra padding on the right so text doesn't slide under the X button */
+#item {
+    padding-right: 34px !important;
+}
+
 /* Published date text */
 .cmp-date {
     font-size: 11px;
