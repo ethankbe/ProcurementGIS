@@ -63,12 +63,18 @@ def filters():
         return [{"name": x["name"], "n": int(x["n"])} for x in query(
             "SELECT %s AS name, COUNT(*) AS n FROM contracts WHERE %s IS NOT NULL AND %s <> '' "
             "GROUP BY %s ORDER BY n DESC" % (col, col, col, col))]
+            
+    # --- Fetch the latest published date ---
+    date_res = query("SELECT DATE_FORMAT(MAX(published), '%%M %%e, %%Y') AS max_date FROM contracts WHERE published IS NOT NULL")
+    latest_date = date_res[0]["max_date"] if date_res and date_res[0]["max_date"] else "Unknown Date"
+
     return {
         "regions": [{"name": k, "n": n} for k, n in sorted(regions.items())],
         "provinces": [{"name": k[0], "region": k[1], "n": n} for k, n in sorted(provinces.items(), key=lambda i: str(i[0]))],
         "cities": [{"name": k[0], "province": k[1], "region": k[2], "n": n} for k, n in sorted(cities.items(), key=lambda i: str(i[0]))],
         "agencies": sorted(agencies.values(), key=lambda a: a["name"]),
         "categories": tally("category"), "statuses": tally("status"),
+        "last_updated": latest_date 
     }
 
 
@@ -221,11 +227,19 @@ def make_matcher(groups):
     return ok
 
 
-def fetch_rows(q, address_ids=None, filters=None):
+def fetch_rows(q, address_ids=None, filters=None, min_budget=0, max_budget=None):
     groups = parse_query(q)
     clause, args = search_clause(groups)
     matches = make_matcher(groups)
     where = ["a.lat IS NOT NULL", clause]
+
+    if min_budget > 0:
+        where.append("i.item_budget >= %s")
+        args.append(min_budget)
+    if max_budget and max_budget < 10000000:
+        where.append("i.item_budget <= %s")
+        args.append(max_budget)
+
     fc, fa = filter_sql(filters or {})
     where += fc
     args = args + fa
@@ -281,9 +295,11 @@ def summarize(rows):
 
 
 @app.get("/api/items/pins")
-def item_pins(q: str = Query(..., min_length=2, max_length=200), f: dict = Depends(filter_params)):
+def item_pins(q: str = Query(..., min_length=2, max_length=200), 
+              min_budget: float = 0, max_budget: float = 10000000, 
+              f: dict = Depends(filter_params)):
     """Locations that bought items matching q, with per-location price stats."""
-    rows, truncated = fetch_rows(q, None, f)
+    rows, truncated = fetch_rows(q, None, f, min_budget, max_budget)
     by_addr = {}
     for r in rows:
         by_addr.setdefault(r["address_id"], []).append(r)

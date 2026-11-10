@@ -22,8 +22,21 @@ const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 
 // --- Map Initialization & Styling ---
-const BASE = {radius: 8, color: "#2563eb", weight: 2, fillOpacity: .55}; 
-const ACTIVE = {radius: 11, color: "#ef4444", weight: 3, fillOpacity: .8}; 
+const BASE = {
+    radius: 8,
+    color: "#ffffff",
+    weight: 1.5,
+    fillColor: "#3b82f6",
+    fillOpacity: 0.75
+};
+
+const ACTIVE = {
+    radius: 11,
+    color: "#ffffff",
+    weight: 2,
+    fillColor: "#ef4444",
+    fillOpacity: 1
+};
 
 // Initialize map centered on the Philippines
 const map = L.map("map").setView([12.8797, 121.7740], 6); 
@@ -84,8 +97,6 @@ const refLine = (ref, right, text) =>
 // --- Data Fetching (Agencies & Items) ---
 async function loadAgencies() {
     const params = filterParams(false);
-    const mb = $("minInput").value; 
-    if (mb) params.set("min_budget", mb);
     
     const res = await fetch("/api/pins?" + params);
     if (!res.ok) throw new Error("bad response");
@@ -95,7 +106,7 @@ async function loadAgencies() {
         p => `<div class="pop"><h2>${esc(p.entities)}</h2><div class="addr">${esc(p.address)}</div>` +
              `<dl><dt>Contracts</dt><dd>${p.contracts}</dd><dt>Total budget</dt><dd>${peso(p.total_budget)}</dd>` +
              `<dt>Location</dt><dd>${esc(p.precision)}</dd></dl><ul class="refs" id="refs-${p.id}"><li class="more">Loading contracts...</li></ul></div>`,
-        async p => {
+             async p => {
             const el = $(`refs-${p.id}`);
             try {
                 const r = await fetch(`/api/pins/${p.id}/contracts?limit=10&${filterParams(false)}`);
@@ -118,6 +129,13 @@ async function loadAgencies() {
 }
 
 async function loadItems(itemQ) {
+    const params = filterParams(true);
+
+    const minB = $("minInput").value;
+    const maxB = $("maxInput").value;
+    if (minB) params.set("min_budget", minB);
+    if (maxB) params.set("max_budget", maxB);
+
     const res = await fetch("/api/items/pins?q=" + encodeURIComponent(itemQ) + "&" + filterParams(true));
     if (!res.ok) { $("status").textContent = "Type at least 2 characters to search items."; return; }
     const data = await res.json();
@@ -125,8 +143,11 @@ async function loadItems(itemQ) {
     render(data,
         p => `<div class="pop"><h2>${esc(p.entities)}</h2><div class="addr">${esc(p.address)}</div>` +
              `<dl><dt>Matching items</dt><dd>${p.n_items}${p.total_qty ? ` (${num(p.total_qty)} units)` : ""}</dd>` +
-             (p.n_comparable ? `<dt>Per unit</dt><dd>${peso(p.min_unit)} to ${peso(p.max_unit)}</dd><dt>Median</dt><dd>${peso(p.median_unit)}</dd>`
-                             : `<dt>Per unit</dt><dd>not available</dd>`) + `</dl>` +
+             (p.n_comparable 
+             ? (p.min_unit === p.max_unit 
+                 ? `<dt>Per unit</dt><dd>${peso(p.min_unit)}</dd>`
+                 : `<dt>Per unit</dt><dd>${peso(p.min_unit)} to ${peso(p.max_unit)}</dd><dt>Median</dt><dd>${peso(p.median_unit)}</dd>`)
+             : `<dt>Per unit</dt><dd>Not Available</dd>`) + `</dl>` +
              `<ul class="refs" id="refs-${p.id}"><li class="more">Loading items...</li></ul>` +
              `<button class="btn" id="cmp-${p.id}" style="width:100%; margin-top:10px;">Add to comparison</button></div>`,
         async p => {
@@ -188,6 +209,19 @@ function filterParams(forItems) {
         if (FILTERS && FILTERS.agencies.some(x => x.name === a)) p.set("agency", a);
         else if (!forItems) p.set("q", a);
     }
+    
+    // --- Fix: Apply Price Range Filters globally ---
+    const minB = $("minInput").value;
+    const maxB = $("maxInput").value;
+    
+    // Only append to the URL if they have been moved from their absolute extremes
+    if (minB && Number(minB) > 1000) {
+        p.set("min_budget", minB);
+    }
+    if (maxB && Number(maxB) < 10000000) {
+        p.set("max_budget", maxB);
+    }
+    
     return p;
 }
 
@@ -201,11 +235,11 @@ function fillFilters() {
         if ([...s.options].some(o => o.value === v)) s.value = v; 
     };
     
-    keep("f-region", opts(F.regions, "All regions"));
-    keep("f-province", opts(F.provinces.filter(x => !r || x.region === r), "All provinces"));
-    keep("f-city", opts(F.cities.filter(x => (!r || x.region === r) && (!pr || x.province === pr)), "All cities"));
-    keep("f-category", opts(F.categories, "All categories"));
-    keep("f-status", opts(F.statuses, "All statuses"));
+    keep("f-region", opts(F.regions, "All Regions"));
+    keep("f-province", opts(F.provinces.filter(x => !r || x.region === r), "All Provinces"));
+    keep("f-city", opts(F.cities.filter(x => (!r || x.region === r) && (!pr || x.province === pr)), "All Cities"));
+    keep("f-category", opts(F.categories, "All Categories"));
+    keep("f-status", opts(F.statuses, "All Statuses"));
     
     $("agencylist").innerHTML = F.agencies
         .filter(x => (!r || x.region === r) && (!pr || x.province === pr) && (!c || x.city === c))
@@ -213,7 +247,13 @@ function fillFilters() {
 }
 
 function countFilters() {
-    const n = Object.values(SEL).filter(id => $(id).value).length + ($("q").value.trim() ? 1 : 0) + ($("minInput").value !== "1000" ? 1 : 0);
+    // Check if either slider has been moved from its default position
+    let priceActive = 0;
+    if (Number($("minInput").value) > 1000 || Number($("maxInput").value) < 10000000) {
+        priceActive = 1;
+    }
+    
+    const n = Object.values(SEL).filter(id => $(id).value).length + ($("q").value.trim() ? 1 : 0) + priceActive;
     $("fcount").textContent = n ? `(${n} active)` : "";
 }
 
@@ -227,6 +267,9 @@ $("clearF").onclick = () => {
     $("minInput").value = "1000"; $("maxInput").value = "10000000";
     $("minb").value = "1000"; $("maxb").value = "10000000";
     updatePriceRange("min");
+
+    // reset the search item
+    // $("item").value ="";
     
     if (FILTERS) fillFilters();
     countFilters(); 
@@ -277,11 +320,17 @@ function drawTray() {
     const t = $("tray");
     t.style.display = selected.length ? "flex" : "none";
     if (!selected.length) return;
-    t.innerHTML = `<span>${selected.map(s => `<b>${esc(s.entities)}</b>`).join(" and ")}` +
-        (selected.length < 2 ? ", pick one more" : "") + `</span>` +
-        `<button class="btn" id="goCmp" ${selected.length < 2 ? "disabled" : ""}>Compare</button>` +
-        `<button class="btn ghost" id="clrCmp" style="background:transparent; color:white; border:none; padding:0;">Clear</button>`;
     
+    const text = selected.length === 2 
+        ? `<span class="tray-agency" title="${esc(selected[0].entities)}"><b>${esc(selected[0].entities)}</b></span> <span class="vs">vs</span> <span class="tray-agency" title="${esc(selected[1].entities)}"><b>${esc(selected[1].entities)}</b></span>`
+        : `<span class="tray-agency" title="${esc(selected[0].entities)}"><b>${esc(selected[0].entities)}</b></span> <span class="vs">...</span> <span style="color:#94a3b8; white-space:nowrap;">pick one more</span>`;
+
+    const fullTitle = selected.map(s => s.entities).join(" vs ");
+
+    t.innerHTML = `<div class="tray-text" title="${esc(fullTitle)}">${text}</div>` +
+        `<button class="btn" id="goCmp" ${selected.length < 2 ? "disabled" : ""}>Compare</button>` +
+        `<button class="btn tray-clr" id="clrCmp">Clear</button>`;
+        
     $("clrCmp").onclick = () => { selected = []; drawTray(); markCompare(); };
     $("goCmp").onclick = showCompare;
 }
@@ -294,45 +343,105 @@ async function showCompare() {
     if (!res.ok) return;
     
     const d = await res.json(), A = d.a, B = d.b;
-    const lo = (x, y) => (x != null && y != null && x < y) ? "low" : "";
-    const row = (label, x, y, fmt, hi) =>
-        `<tr><td>${label}</td><td class="num ${hi ? lo(x, y) : ""}">${fmt(x)}</td><td class="num ${hi ? lo(y, x) : ""}">${fmt(y)}</td></tr>`;
+    const lo = (x, y) => (x != null && y != null && x < y) ? "cmp-cheaper" : "";
     
-    let diff = "";
-    if (A.median_unit != null && B.median_unit != null && A.median_unit !== B.median_unit) {
-        const lower = A.median_unit < B.median_unit ? A : B, higher = lower === A ? B : A;
-        const pct = (higher.median_unit - lower.median_unit) / lower.median_unit * 100;
-        diff = `<p style="padding:15px; background:var(--bg); border-radius:8px;">The median budget per unit is <b>${pct.toFixed(0)}% higher</b> at ${esc(higher.entities.join("; "))} than at ${esc(lower.entities.join("; "))}.</p>`;
-    }
-    
-    const lines = X => X.lines.length
-        ? `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;"><tr><th style="padding:8px; border-bottom:1px solid var(--line);">Item</th><th style="padding:8px; border-bottom:1px solid var(--line);">Qty</th><th style="padding:8px; border-bottom:1px solid var(--line);">Per unit</th></tr>` +
-          X.lines.slice(0, 15).map(l => `<tr><td style="padding:8px; border-bottom:1px solid var(--line);">${esc(l.item)}<br><span style="font-size:11px; color:var(--muted);">${esc(l.bid_ref)}</span></td><td style="padding:8px; border-bottom:1px solid var(--line);">${num(l.quantity)}</td>` +
-          `<td style="padding:8px; border-bottom:1px solid var(--line);">${l.comparable ? peso(l.unit_budget) : (l.item_budget != null ? peso(l.item_budget) : "n/a")}</td></tr>`).join("") + "</table>"
-        : "<p>No matching items.</p>";
-        
+    const formatDate = (dateStr) => {
+        if (!dateStr) return "";
+        const d = new Date(dateStr);
+        return isNaN(d) ? dateStr : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    };
+
+    const renderLines = (X) => X.lines.length
+        ? `<div class="cmp-table-wrap"><table>
+             <thead><tr><th>Item Details</th><th>Qty</th><th>Per Unit</th></tr></thead>
+             <tbody>` +
+             X.lines.slice(0, 10).map(l => `
+               <tr>
+                 <td>
+                   <div class="cmp-item-title">${esc(l.item)}</div>
+                   <div class="cmp-meta-badges">
+                     <span class="ref">${esc(l.bid_ref)}</span>
+                     ${l.status ? `<span class="cmp-status-badge">${esc(l.status)}</span>` : ""}
+                     ${l.published ? `<span class="cmp-date">${formatDate(l.published)}</span>` : ""}
+                   </div>
+                 </td>
+                 <td class="num">${num(l.quantity)} ${esc(l.uom || "")}</td>
+                 <td class="num font-semibold">${l.comparable ? peso(l.unit_budget) : (l.item_budget != null ? peso(l.item_budget): "n/a")}</td>
+               </tr>`).join("") +
+             `</tbody></table></div>`
+        : `<p class="cmp-empty">No matching contract line items found.</p>`;
+
     const c = $("cmp");
     c.hidden = false;
-    c.innerHTML = `<button class="btn ghost" id="closeCmp" style="float:right">Close</button><h2 style="margin-top:0">Comparing "${esc(itemQ)}"</h2>` +
-        `<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left; margin-bottom:20px;"><tr><th></th><th style="padding:10px;">${esc(A.entities.join("; ") || "A")}</th><th style="padding:10px;">${esc(B.entities.join("; ") || "B")}</th></tr>` +
-        row("Lowest per unit", A.min_unit, B.min_unit, peso, true) +
-        row("Median per unit", A.median_unit, B.median_unit, peso, true) +
-        row("Highest per unit", A.max_unit, B.max_unit, peso, true) + `</table>${diff}` +
-        `<h3 style="font-size:14px; margin-top:20px;">${esc(A.entities.join("; "))}</h3>${lines(A)}<h3 style="font-size:14px; margin-top:20px;">${esc(B.entities.join("; "))}</h3>${lines(B)}`;
+    c.innerHTML = `
+        <div class="cmp-header">
+            <div>
+                <h2>Price Benchmark Comparison</h2>
+                <p class="cmp-subtitle">Query: "${esc(itemQ)}"</p>
+            </div>
+            <button class="btn ghost" id="closeCmp">Close</button>
+        </div>
+
+        <div class="cmp-grid">
+            <!-- Location A Card -->
+            <div class="cmp-card">
+                <h3>${esc(A.entities.join("; ") || "Location A")}</h3>
+                <p class="cmp-address">${esc(A.address || "No address listed")}</p>
+                <div class="cmp-stats">
+                    <div class="stat-row"><span>Items Found</span> <b>${num(A.n_items)}</b></div>
+                    <div class="stat-row"><span>Lowest Unit</span> <b class="${lo(A.min_unit, B.min_unit)}">${peso(A.min_unit)}</b></div>
+                    <div class="stat-row"><span>Median Unit</span> <b class="${lo(A.median_unit, B.median_unit)}">${peso(A.median_unit)}</b></div>
+                    <div class="stat-row"><span>Highest Unit</span> <b class="${lo(A.max_unit, B.max_unit)}">${peso(A.max_unit)}</b></div>
+                </div>
+                <h4 class="cmp-section-title">Recent Contract Entries</h4>
+                ${renderLines(A)}
+            </div>
+
+            <!-- Location B Card -->
+            <div class="cmp-card">
+                <h3>${esc(B.entities.join("; ") || "Location B")}</h3>
+                <p class="cmp-address">${esc(B.address || "No address listed")}</p>
+                <div class="cmp-stats">
+                    <div class="stat-row"><span>Items Found</span> <b>${num(B.n_items)}</b></div>
+                    <div class="stat-row"><span>Lowest Unit</span> <b class="${lo(B.min_unit, A.min_unit)}">${peso(B.min_unit)}</b></div>
+                    <div class="stat-row"><span>Median Unit</span> <b class="${lo(B.median_unit, A.median_unit)}">${peso(B.median_unit)}</b></div>
+                    <div class="stat-row"><span>Highest Unit</span> <b class="${lo(B.max_unit, A.max_unit)}">${peso(B.max_unit)}</b></div>
+                </div>
+                <h4 class="cmp-section-title">Recent Contract Entries</h4>
+                ${renderLines(B)}
+            </div>
+        </div>
         
+        <p class="cmp-note">Note: Per-unit prices reflect approved agency budget allocations divided by quantity, not final payouts.</p>
+    `;
+
     $("closeCmp").focus();
     $("closeCmp").onclick = () => { c.hidden = true; };
 }
-
 document.addEventListener("keydown", e => { if (e.key === "Escape") $("cmp").hidden = true; });
 
 
 // --- Initialization Call ---
 fetch("/api/filters").then(r => r.ok ? r.json() : null)
-    .then(f => { if (f) { FILTERS = f; fillFilters(); } })
-    .catch(() => {}).finally(refresh);
+    .then(f => { 
+        if (f) { 
+            FILTERS = f; 
+            fillFilters(); 
+            
+            // Update the date in the header
+            if (f.last_updated) {
+                $("last-updated").textContent = f.last_updated;
+            } else {
+                $("last-updated").textContent = "Unknown Date";
+            }
+        } 
+    })
+    .catch(() => {
+        $("last-updated").textContent = "Offline";
+    }).finally(refresh);
 
 
+// --- Price Range Slider Logic ---
 // --- Price Range Slider Logic ---
 const minSlider = $("minb");
 const maxSlider = $("maxb");
@@ -387,3 +496,28 @@ maxInput.addEventListener("change", () => {
     );
     updatePriceRange("max");
 });
+
+// --- FORCE RESET ON INITIAL LOAD ---
+// Clears out any cached browser values when the page refreshes
+window.addEventListener("DOMContentLoaded", () => {
+    minSlider.value = "1000";
+    maxSlider.value = "10000000";
+    minInput.value = "1000";
+    maxInput.value = "10000000";
+    updatePriceRange("min");
+});
+
+// for getting date
+function updateDataDate() {
+    const today = new Date();
+
+    $("dataDate").textContent =
+        new Intl.DateTimeFormat("en-PH", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+            timeZone: "Asia/Manila"
+        }).format(today);
+}
+
+updateDataDate();

@@ -62,7 +62,7 @@ html, body {
 }
 
 .header-brand h1 {
-    font-size: 20px;
+    font-size: 28px;
     margin: 0;
     font-weight: 700;
     color: #102039;
@@ -367,38 +367,42 @@ select {
     box-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
 }
 
-.row {
-    text-align: left;
-    background: none;
-    border: 0;
-    padding: 0;
-    width: 100%;
-    cursor: pointer;
+/* Ensure the button inherits the modern Inter font */
+.row { 
+    text-align: left; 
+    background: none; 
+    border: 0; 
+    padding: 0; 
+    width: 100%; 
+    cursor: pointer; 
+    font-family: inherit; 
 }
 
-.name {
-    display: block;
-    font-weight: 650;
-    font-size: 13px;
+/* Agency Name */
+.name { 
+    display: block; 
+    font-weight: 800; 
+    font-size: 13px; 
+    color: #0f172a; 
+    margin-bottom: 6px; 
     line-height: 1.4;
-    color: #172538;
-    margin-bottom: 5px;
+    letter-spacing: 0.2px;
 }
 
-.addr {
-    display: block;
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1.5;
-}
-
-.meta {
-    display: block;
-    margin-top: 10px;
-    font-size: 12px;
-    font-weight: 650;
+/* Contract & Budget Stats ("4 contracts, PHP 34,168,067") */
+.meta { 
+    display: block; 
+    margin-top: 12px; 
+    font-size: 12px; 
+    font-weight: 500; 
     color: var(--accent);
-    line-height: 1.5;
+    /* font-weight: 600; */
+}
+
+/* Make just the bolded numbers pop with your accent blue */
+.meta b {
+    /* color: var(--accent); */
+    font-weight: 600;
 }
 
 .cmpbtn {
@@ -481,39 +485,547 @@ select {
     overflow-y: auto;
 }
 
+/* --- Map Popup Contract List Styles --- */
+.refs li { 
+    padding: 8px 0; 
+    border-bottom: 1px solid var(--line); 
+}
+.refs li:last-child { 
+    border-bottom: none; 
+}
+.refs .top { 
+    display: flex; 
+    justify-content: space-between; 
+    gap: 12px; 
+    align-items: flex-start; 
+}
+.ref { 
+    font-family: ui-monospace, Menlo, monospace; 
+    font-size: 12px; 
+    background: #f1f5f9; 
+    padding: 2px 6px; 
+    border-radius: 4px; 
+    color: #475569; 
+}
+.amt { 
+    font-weight: 600; 
+    font-size: 12px; 
+    color: var(--accent); 
+    white-space: nowrap; 
+    padding-right: 16px;
+}
+.refs .t { 
+    font-size: 12px; 
+    margin-top: 4px; 
+    color: #334155; 
+    line-height: 1.4; 
+    padding-right: 16px;
+    padding-left: 4px;
+    text-align: justify;
+}
+.refs .more { 
+    color: var(--muted); 
+    font-size: 12px; 
+    text-align: center; 
+    border: none; 
+    padding-top: 8px; 
+}
+
 /* =================================
    COMPARISON
 ================================= */
 
-#cmp {
-    position: absolute;
-    z-index: 900;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(500px, 85%);
-    background: white;
-    box-shadow: -4px 0 24px rgba(0,0,0,0.1);
-    padding: 24px;
-    overflow-y: auto;
+/* --- Modern Comparison Modal Styles --- */
+/* --- Modern Comparison Drawer (Right Sidebar) --- */
+#cmp { 
+    position: absolute; 
+    z-index: 900; 
+    top: 0; 
+    right: 0; 
+    bottom: 0; 
+    width: 480px; 
+    max-width: 100%; 
+    background: #ffffff; 
+    border-left: 1px solid var(--line); 
+    box-shadow: -8px 0 25px rgba(0,0,0,0.1); 
+    overflow-y: auto; 
+    padding: 24px; 
+    font-family: inherit;
+}
+#cmp[hidden] { display: none; }
+
+/* Fixed Header layout so the Close button stays inline properly */
+.cmp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 14px;
 }
 
-#tray {
-    position: absolute;
-    z-index: 800;
-    left: 50%;
-    bottom: 30px;
-    transform: translateX(-50%);
-    background: #1e293b;
-    color: white;
-    border-radius: 30px;
-    padding: 12px 24px;
-    display: none;
-    gap: 15px;
-    align-items: center;
+.cmp-header > div {
+    min-width: 0;
+    flex: 1;
+}
+
+.cmp-header h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 2px 0;
+    letter-spacing: -0.01em;
+}
+
+.cmp-subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0;
+}
+
+/* Compact, properly constrained close button */
+#closeCmp {
+    flex-shrink: 0;
+    width: auto;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 6px;
+    height: auto;
+}
+
+/* Stacks the comparison cards vertically */
+.cmp-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Location Card (Blue top border removed) */
+.cmp-card {
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+/* Font Accent on Agency Title */
+.cmp-card h3 {
     font-size: 13px;
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-    max-width: 90%;
+    font-weight: 700;
+    color: var(--accent); /* Accent color applied to the font */
+    margin: 0 0 4px 0;
+    line-height: 1.3;
+}
+
+.cmp-address {
+    font-size: 11px;
+    color: var(--muted);
+    margin: 0 0 12px 0;
+    line-height: 1.35;
+}
+
+.cmp-stats {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+}
+
+/* Container for metadata badges under items in comparison view */
+.cmp-meta-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-top: 4px;
+}
+
+/* Reference number pill */
+.cmp-table-wrap .ref {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-family: ui-monospace, Menlo, monospace;
+    background: #e2e8f0;
+    color: #334155;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+/* Status badge (e.g., Awarded) */
+.cmp-status-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 700;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* Published date text */
+.cmp-date {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 500;
+    margin-left: 2px;
+}
+
+/* Clean, subtle green indicator for the lower/better price option */
+.cmp-cheaper {
+    color: #40be6e !important;
+    font-weight: 700;
+}
+
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 4px 0;
+    color: #475569;
+}
+
+.stat-row b {
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.cmp-highlight {
+    color: #16a34a !important; 
+    background: #dcfce7;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+/* Font Accent on Section Titles */
+.cmp-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent); /* Accent color on section headers */
+    margin: 14px 0 6px 0;
+    font-weight: 700;
+}
+
+.cmp-table-wrap {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: white;
+}
+
+.cmp-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.cmp-table-wrap th {
+    background: #f1f5f9;
+    position: sticky;
+    top: 0;
+    padding: 8px;
+    text-align: left;
+    font-weight: 600;
+    color: #334155;
+    border-bottom: 1px solid var(--line);
+}
+
+.cmp-table-wrap td {
+    padding: 8px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    color: #334155;
+}
+
+.cmp-item-title {
+    font-weight: 500;
+    color: #0f172a;
+    margin-bottom: 4px;
+}
+
+.cmp-table-wrap .ref {
+    display: inline-block;
+    margin-top: 2px;
+    font-size: 10px;
+    background: #e2e8f0;
+    color: #475569;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.cmp-empty {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    padding: 12px 0;
+}
+
+.cmp-note {
+    font-size: 11px;
+    color: var(--muted);
+    background: #f1f5f9;
+    padding: 12px;
+    border-radius: 6px;
+    margin-top: 20px;
+    text-align: center;
+    line-height: 1.4;
+    border: 1px dashed var(--line);
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 4px 0;
+    color: #475569;
+}
+
+.stat-row b {
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.cmp-highlight {
+    color: #16a34a !important; 
+    background: #dcfce7;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.cmp-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin: 14px 0 6px 0;
+    font-weight: 600;
+}
+
+.cmp-table-wrap {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: white;
+}
+
+.cmp-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.cmp-table-wrap th {
+    background: #f1f5f9;
+    position: sticky;
+    top: 0;
+    padding: 8px;
+    text-align: left;
+    font-weight: 600;
+    color: #334155;
+    border-bottom: 1px solid var(--line);
+}
+
+.cmp-table-wrap td {
+    padding: 8px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    color: #334155;
+}
+
+.cmp-item-title {
+    font-weight: 500;
+    color: #0f172a;
+    margin-bottom: 4px;
+}
+
+/* Fixes ref number positioning so it hugs right under item details cohesively */
+.cmp-table-wrap .ref {
+    display: inline-block;
+    margin-top: 2px;
+    font-size: 10px;
+    background: #e2e8f0;
+    color: #475569;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.cmp-empty {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    padding: 12px 0;
+}
+
+/* Styled footnote note at the bottom */
+.cmp-note {
+    font-size: 11px;
+    color: var(--muted);
+    background: #f1f5f9;
+    padding: 12px;
+    border-radius: 6px;
+    margin-top: 20px;
+    text-align: center;
+    line-height: 1.4;
+    border: 1px dashed var(--line);
+}
+
+/*  */
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 3px 0;
+    color: #475569;
+}
+
+.stat-row b {
+    color: #0f172a;
+}
+
+.cmp-highlight {
+    color: #16a34a !important; 
+    background: #dcfce7;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+
+.cmp-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin: 12px 0 6px 0;
+    font-weight: 600;
+}
+
+.cmp-table-wrap {
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: white;
+}
+
+.cmp-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.cmp-table-wrap th {
+    background: #f1f5f9;
+    position: sticky;
+    top: 0;
+    padding: 6px;
+    text-align: left;
+    font-weight: 600;
+    color: #334155;
+    border-bottom: 1px solid var(--line);
+}
+
+.cmp-table-wrap td {
+    padding: 6px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+}
+
+.cmp-item-title {
+    font-weight: 500;
+    color: #0f172a;
+    margin-bottom: 2px;
+}
+
+.cmp-empty {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    padding: 12px 0;
+}
+
+.cmp-note {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 16px;
+    text-align: center;
+    line-height: 1.4;
+}
+
+/* --- Floating Comparison Tray --- */
+/* --- Floating Comparison Tray --- */
+#tray { 
+    position: absolute; 
+    z-index: 800; 
+    left: 50%; 
+    bottom: 30px; 
+    transform: translateX(-50%); 
+    background: #1e293b; 
+    color: white; 
+    border-radius: 50px; 
+    padding: 10px 16px 10px 24px; 
+    display: none; 
+    gap: 16px; 
+    align-items: center; 
+    font-size: 13px; 
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    max-width: 95%;
+}
+
+/* Increased max-width from 450px to 650px to fit significantly more characters */
+.tray-text {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+    max-width: 650px; 
+    min-width: 0;
+}
+
+.tray-agency {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.tray-text .vs {
+    color: #94a3b8; 
+    font-weight: 400;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+#tray .btn {
+    border-radius: 20px;
+    padding: 8px 16px;
+    white-space: nowrap;
+}
+
+#tray .tray-clr {
+    background: transparent;
+    color: #cbd5e1;
+    border: none;
+    padding: 8px 12px;
+}
+
+#tray .tray-clr:hover {
+    color: white;
+    background: rgba(255,255,255,0.1);
 }
 
 /* =================================
@@ -610,37 +1122,90 @@ select {
 range slider
 */
 
-.range-slider input[type="range"]::-webkit-slider-thumb {
-    appearance: none;
+/* --- Dual Range Slider Styles --- */
+.range-values {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+}
+
+/* The custom visible track */
+.range-slider {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    background: #cbd5e1; /* Track color */
+    border-radius: 4px;
+    margin-bottom: 16px;
+    margin-top: 10px;
+}
+
+/* Stack the inputs and hide their default tracks */
+.range-slider input[type="range"] {
+    position: absolute;
+    width: 100%;
+    top: 0px; /* Re-centered for the new 14px thumb over the 6px track */
     -webkit-appearance: none;
-    pointer-events: auto;
-    width: 17px;
-    height: 17px;
-    border-radius: 50%;
-    background: var(--accent);
-    border: 2px solid white;
-    box-shadow: 0 1px 4px rgba(0,0,0,.25);
-    cursor: pointer;
+    appearance: none;
+    background: transparent; 
+    pointer-events: none; /* Allows you to click the thumb underneath */
+    border: none;
+    outline: none;
 }
 
+/* Style the draggable thumbs (Webkit/Chrome/Edge) */
+.range-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 14px; /* Smaller circle */
+    width: 14px;  /* Smaller circle */
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    pointer-events: auto; /* Make ONLY the thumb clickable */
+    border: none; /* Ensures no rough native borders */
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); /* Softer shadow for a smoother edge */
+}
+
+/* Style the draggable thumbs (Firefox) */
 .range-slider input[type="range"]::-moz-range-thumb {
-    pointer-events: auto;
-    width: 13px;
-    height: 13px;
+    height: 14px; /* Smaller circle */
+    width: 14px;  /* Smaller circle */
     border-radius: 50%;
     background: var(--accent);
-    border: 2px solid white;
     cursor: pointer;
+    pointer-events: auto;
+    border: none; /* Ensures no rough native borders */
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); /* Softer shadow for a smoother edge */
 }
 
+/* Layout for the manual number inputs */
 .range-inputs {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 13px;
+}
+.range-inputs input {
+    text-align: center;
+    padding: 8px 4px;
 }
 
-.range-inputs input {
-    min-width: 0;
-    flex: 1;
-    text-align: center;
+.leaflet-tile {
+    filter: saturate(0.65) brightness(1.04);
+}
+
+.leaflet-container {
+    background: #eaf3f8;
+    font-family: 'Inter', sans-serif;
+}
+
+.leaflet-popup-content-wrapper {
+    border-radius: 8px;
+}
+
+.leaflet-popup-content {
+    margin: 14px;
 }

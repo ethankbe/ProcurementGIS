@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Procurement Price Monitoring System</title>
+    <title>Who Buys What? Government Procurement Analytics & GIS</title>
     
     <!-- External CSS Libraries -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -20,11 +20,12 @@
     <!-- ========================================== -->
     <header class="top-header">
         <div class="header-brand">
-            <h1>Procurement Price Monitoring System</h1>
+            <h1>Who Buys What?</h1>
             <p>Government Procurement Analytics & GIS</p>
         </div>
         <div class="header-actions">
-            Data as of: Today | <button class="btn ghost" style="padding: 6px 12px; margin-left: 10px;">Export Report</button>
+            Data as of: <span id="last-updated">Loading...</span> 
+            <!-- | <button class="btn ghost" style="padding: 6px 12px; margin-left: 10px;">Export Report</button> -->
         </div>
     </header>
 
@@ -62,10 +63,11 @@
                 </div>
 
                 <!-- Manual Number Inputs -->
+                <!-- Manual Number Inputs -->
                 <div class="range-inputs">
-                    <input type="number" id="minInput" min="1000" value="1000">
+                    <input type="number" id="minInput" min="1000" value="1000" autocomplete="off">
                     <span>to</span>
-                    <input type="number" id="maxInput" min="1000" value="10000000">
+                    <input type="number" id="maxInput" min="1000" value="10000000" autocomplete="off">
                 </div>
             </div>
 
