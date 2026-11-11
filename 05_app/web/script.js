@@ -128,15 +128,17 @@ function focusLoc(id) {
     m.openPopup();
 }
 
-const refLine = (ref, right, text, awardId = null) => {
-    // If an award ID exists, display it. Otherwise, fall back to the bid ref.
-    const displayId = awardId || ref; 
+const refLine = (ref, right, text, awardId = null, awardee = null) => {
+    const displayId = awardId || ref;
     
+    // Create a sleek tag for the awardee if data exists
+    const awardeeHtml = awardee ? `<div style="font-size: 11px; color: var(--muted, #64748b); margin-top: 6px; padding-left: 4px"><strong>Supplier:</strong> ${esc(awardee)}</div>` : "";
+
     return `<li><div class="top">` +
     `<a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(displayId)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="View PhilGEPS Award Notice">` +
-    `<span class="ref" title="Award Reference Number">${esc(displayId)} ↗</span>` +
+    `<span class="ref" title="Award Notice Number">${esc(displayId)} ↗</span>` +
     `</a>` +
-    `<span class="amt">${right}</span></div><div class="t">${text}</div></li>`;
+    `<span class="amt">${right}</span></div><div class="t">${text}</div>${awardeeHtml}</li>`;
 };
 
 
@@ -182,7 +184,8 @@ async (p, marker) => {
                             : ""
                     ),
                     esc(x.title),
-                    x.award_id
+                    x.award_id,
+                    x.awardee
                 )
             ).join("") +
             (p.contracts > rows.length
@@ -245,11 +248,8 @@ async function loadItems(itemQ) {
                 const d = r.ok ? await r.json() : null;
                 const lines = d ? d.a.lines : [];
                 el.innerHTML = lines.length
-                    ? lines.slice(0, 10).map(l => refLine(
-                          l.bid_ref, 
-                          l.comparable ? peso(l.unit_budget) + " each" : (l.item_budget != null ? peso(l.item_budget) + " total" : "n/a"), 
-                          `${esc(l.item)}, ${num(l.quantity)} ${esc(l.uom || "")}`, 
-                          l.award_id
+                    ? lines.slice(0, 10).map(l => // Add l.awardee at the very end
+refLine(l.bid_ref, l.comparable ? peso(l.unit_budget) + " each" : (l.item_budget != null ? peso(l.item_budget) + " total" : "n/a"), `${esc(l.item)}, ${num(l.quantity)} ${esc(l.uom || "")}`, l.award_id, l.awardee
                       )).join("") + 
                       (lines.length > 10 ? `<li class="more">Showing 10 of ${lines.length} items</li>` : "")
                     : `<li class="more">No items to show.</li>`;
@@ -441,7 +441,7 @@ async function showCompare() {
         return isNaN(d) ? dateStr : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     };
 
-    const renderLines = (X) => X.lines.length
+const renderLines = (X) => X.lines.length
         ? `<div class="cmp-table-wrap"><table>
              <thead><tr><th>Item Details</th><th>Qty</th><th>Per Unit</th></tr></thead>
              <tbody>` +
@@ -449,6 +449,8 @@ async function showCompare() {
                <tr>
                  <td>
                    <div class="cmp-item-title">${esc(l.item)}</div>
+                   <!-- Awardee tag added right below the title -->
+                   ${l.awardee ? `<div style="font-size: 11px; color: var(--muted, #64748b); margin-top: 4px;"><strong>Supplier:</strong> ${esc(l.awardee)}</div>` : ""}
                    <div class="cmp-meta-badges">
                      <a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(l.award_id || l.bid_ref)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="View PhilGEPS Award Notice">
                        <!-- Changed to display the award_id inside the badge -->

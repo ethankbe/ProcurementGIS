@@ -22,9 +22,22 @@ def parse_entity(html, bid_ref):
     soup = BeautifulSoup(html, "html.parser")
     name = soup.select_one("center.verdhana_bold_twelvepx")
     addr = soup.select_one("center.verdhana_twelvepx")
+    
+    # Extract the Awardee
+    awardee = None
+    awardee_label = soup.find(string=lambda text: text and "Awardee:" in text)
+    if awardee_label:
+        # Find the next non-empty string in the HTML after the label
+        for nxt in awardee_label.find_all_next(string=True):
+            val = nxt.strip()
+            if val:
+                awardee = val
+                break
+                
     ref_match = str(bid_ref) in soup.get_text(" ")   # sanity check
     return (name.get_text(" ", strip=True) if name else None,
             addr.get_text(" ", strip=True) if addr else None,
+            awardee,
             ref_match)
 
 targets = pd.read_csv("targets.csv", dtype=str)     # office_key, bid_ref, award_ref
@@ -49,8 +62,9 @@ try:
             if t.office_key in done:
                 continue
             award_no = t.award_ref if pd.notna(t.award_ref) and t.award_ref else lookup.get(t.bid_ref)
+            # Added "awardee": None to the default row
             row = {"office_key": t.office_key, "bid_ref": t.bid_ref, "award_no": award_no,
-                   "entity_name": None, "raw_address": None, "ref_match": None,
+                   "entity_name": None, "raw_address": None, "awardee": None, "ref_match": None,
                    "status": "ok"}
             if not award_no:
                 row["status"] = "no_award_no"
@@ -59,8 +73,10 @@ try:
                 if not html:
                     row["status"] = "fetch_failed"
                 else:
-                    name, addr, ok = parse_entity(html, t.bid_ref)
-                    row.update(entity_name=name, raw_address=addr, ref_match=ok)
+                    # Unpack 4 variables instead of 3
+                    name, addr, awardee, ok = parse_entity(html, t.bid_ref)
+                    # Add awardee to the row update
+                    row.update(entity_name=name, raw_address=addr, awardee=awardee, ref_match=ok)
                     if not addr:
                         row["status"] = "no_address"
                     elif not ok:

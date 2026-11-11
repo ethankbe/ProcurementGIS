@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS contracts (
   id INT AUTO_INCREMENT PRIMARY KEY,
   bid_ref VARCHAR(40) NOT NULL,
   award_no VARCHAR(40),
+  awardee VARCHAR(255),       
   entity_id INT NULL,
   title TEXT, unit VARCHAR(200),
   classification VARCHAR(100), category VARCHAR(150),

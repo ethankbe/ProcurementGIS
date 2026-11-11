@@ -126,7 +126,7 @@ def contracts(address_id: int, limit: int = Query(50, le=200), offset: int = 0,
     rows = query("""
       SELECT c.bid_ref, c.title, c.unit, COALESCE(c.abc, ib.total) AS abc,
              (c.abc IS NULL AND ib.total IS NOT NULL) AS derived,
-             c.published, c.status, c.award_no, e.name
+             c.published, c.status, c.award_no, c.awardee, e.name
       FROM contracts c JOIN entities e ON e.id = c.entity_id
       LEFT JOIN (SELECT bid_ref, SUM(item_budget) AS total FROM items GROUP BY bid_ref) ib
              ON ib.bid_ref = c.bid_ref
@@ -136,7 +136,8 @@ def contracts(address_id: int, limit: int = Query(50, le=200), offset: int = 0,
     # Pass both bid_ref (already there) and award_id (new) to the frontend
     return [{**r, "abc": float(r["abc"]) if r["abc"] is not None else None,
              "derived": bool(r["derived"]),
-             "award_id": r["award_no"],  
+             "award_id": r["award_no"], 
+             "awardee": r["awardee"], # <--- Pass to frontend
              "published": str(r["published"]) if r["published"] else None}
             for r in rows]
 
@@ -251,7 +252,7 @@ def fetch_rows(q, address_ids=None, filters=None, min_budget=0, max_budget=None)
         args = args + list(address_ids)
     rows = query("""
       SELECT i.bid_ref, i.item_name, i.item_desc, i.quantity, i.uom, i.item_budget,
-             c.title, c.published, c.status, c.award_no,
+             c.title, c.published, c.status, c.award_no, c.awardee,
              e.name AS entity, a.id AS address_id, a.clean_address AS address,
              a.lat, a.lon, a.geo_precision AS `precision`
       FROM items i
@@ -273,7 +274,7 @@ def fetch_rows(q, address_ids=None, filters=None, min_budget=0, max_budget=None)
         
         # Add award_id here alongside bid_ref
         out.append({
-            "bid_ref": r["bid_ref"], "award_id": r["award_no"],
+            "bid_ref": r["bid_ref"], "award_id": r["award_no"], "awardee": r["awardee"],
             "item": r["item_name"] or r["title"],
             "description": r["item_desc"], "title": r["title"],
             "quantity": qty, "uom": r["uom"], "item_budget": bud,
@@ -336,7 +337,7 @@ def item_compare(q: str = Query(..., min_length=2, max_length=200), a: int = 0, 
             "address": rs[0]["address"] if rs else None,
             "entities": sorted({r["entity"] for r in rs}),
             **summarize(rs),
-            "lines": [{k: r[k] for k in ("bid_ref", "award_id", "item", "quantity", "uom", "item_budget",
+            "lines": [{k: r[k] for k in ("bid_ref", "award_id", "awardee", "item", "quantity", "uom", "item_budget",
                                          "unit_budget", "comparable", "published", "status", "entity")}
                       for r in rs[:100]],
         }

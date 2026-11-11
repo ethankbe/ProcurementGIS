@@ -25,6 +25,7 @@ import argparse
 import os
 import re
 import sys
+import json
 
 import pandas as pd
 
@@ -81,11 +82,27 @@ def main():
     if missing:
         sys.exit("ERROR: contracts.csv is missing columns: %s\nFound: %s"
                  % (missing, list(c.columns)))
-    for col in ("Region", "Province"):
+    
+    for col in ("Region", "Province", "Awardee Organization Name"):
         if col not in c.columns:
             c[col] = None
-    for col in (BID, AWARD):
-        c[col] = c[col].str.replace(r"\.0$", "", regex=True).str.strip()
+
+    # --- NEW: Pull Awardees from the scraped JSONL file ---
+    awardee_map = {}
+    jsonl_path = os.path.join(os.path.dirname(args.addresses), "addresses_raw.jsonl")
+    if os.path.exists(jsonl_path):
+        with open(jsonl_path, "r") as f:
+            for line in f:
+                try:
+                    data = json.loads(line)
+                    if data.get("bid_ref") and data.get("awardee"):
+                        awardee_map[data["bid_ref"]] = data["awardee"]
+                except json.JSONDecodeError:
+                    pass
+    
+    # Map the scraped awardees to the dataframe using the bid_ref
+    c["awardee"] = c[BID].map(awardee_map)
+    # ------------------------------------------------------
     c["entity_key"] = (c[PE].fillna("").str.upper().str.strip() + " | " +
                        c[CITY].fillna("").str.upper().str.strip())
     c["unit"] = c[TITLE].str.extract(r"\s-\s([^-]+)$", expand=False).str.strip().str.upper()
@@ -98,7 +115,8 @@ def main():
     c = c.rename(columns={BID: "bid_ref", AWARD: "award_no", TITLE: "title",
                           "Classification": "classification",
                           "Procurement Category": "category",
-                          "Bid Notice Status": "status"})
+                          "Bid Notice Status": "status",
+                          "Awardee Organization Name": "awardee"}) # <--- Map the exact CSV name to the database name
     # a bid can span several rows; use the first non-blank budget among them
     c["abc"] = c.groupby("bid_ref")["abc"].transform("first")
 
@@ -239,12 +257,12 @@ def main():
     cc = c.astype(object).where(c.notna(), None)
     cur.executemany(
         """INSERT INTO contracts (bid_ref, award_no, entity_id, title, unit,
-               classification, category, abc, published, status)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               classification, category, abc, published, status, awardee)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
            ON DUPLICATE KEY UPDATE award_no=VALUES(award_no), status=VALUES(status),
-                                   abc=VALUES(abc), entity_id=VALUES(entity_id)""",
+                                   abc=VALUES(abc), entity_id=VALUES(entity_id), awardee=VALUES(awardee)""",
         [(r.bid_ref, r.award_no, ent_id.get(r.entity_key), r.title, r.unit,
-          r.classification, r.category, r.abc, r.published, r.status)
+          r.classification, r.category, r.abc, r.published, r.status, r.awardee)
          for r in cc.itertuples()])
     con.commit()
 
