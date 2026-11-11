@@ -23,7 +23,7 @@ const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // --- Map Initialization & Styling ---
 const BASE = {
-    radius: 8,
+    radius: 10,
     color: "#ffffff",
     weight: 1.5,
     fillColor: "#3b82f6",
@@ -31,7 +31,7 @@ const BASE = {
 };
 
 const ACTIVE = {
-    radius: 11,
+    radius: 13,
     color: "#ffffff",
     weight: 2,
     fillColor: "#f59e0b", // Amber/Orange so it never clashes with green or red price tags
@@ -39,7 +39,7 @@ const ACTIVE = {
 };
 
 // Initialize map centered on the Philippines
-const map = L.map("map").setView([12.8797, 121.7740], 6); 
+const map = L.map("map").setView([12.8797, 121.7740], 10); 
 
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19, 
@@ -91,7 +91,10 @@ function render(data, popupFn, onOpen, rowFn, sortFn) {
             markers[p.id] = l; 
             props[p.id] = p;
             l.bindPopup(popupFn(p), {minWidth: 260, maxWidth: 340});
-            l.on("popupopen", () => { l.setStyle(ACTIVE); onOpen(p); });
+            l.on("popupopen", () => {
+                l.setStyle(ACTIVE);
+                onOpen(p, l);
+            });
             l.on("popupclose", () => {
                 let resetColor = BASE.fillColor;
                 if ($("item").value.trim() && globalMin !== globalMax) {
@@ -125,9 +128,16 @@ function focusLoc(id) {
     m.openPopup();
 }
 
-const refLine = (ref, right, text) =>
-    `<li><div class="top"><span class="ref" title="Bid reference number">${esc(ref)}</span>` +
+const refLine = (ref, right, text, awardId = null) => {
+    // If an award ID exists, display it. Otherwise, fall back to the bid ref.
+    const displayId = awardId || ref; 
+    
+    return `<li><div class="top">` +
+    `<a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(displayId)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="View PhilGEPS Award Notice">` +
+    `<span class="ref" title="Award Reference Number">${esc(displayId)} ↗</span>` +
+    `</a>` +
     `<span class="amt">${right}</span></div><div class="t">${text}</div></li>`;
+};
 
 
 // --- Data Fetching (Agencies & Items) ---
@@ -140,19 +150,59 @@ async function loadAgencies() {
     
     render(data,
         p => `<div class="pop"><h2>${esc(p.entities)}</h2><div class="addr">${esc(p.address)}</div>` +
-             `<dl><dt>Contracts</dt><dd>${p.contracts}</dd><dt>Total budget</dt><dd>${peso(p.total_budget)}</dd>` +
-             `<dt>Location</dt><dd>${esc(p.precision)}</dd></dl><ul class="refs" id="refs-${p.id}"><li class="more">Loading contracts...</li></ul></div>`,
-             async p => {
-            const el = $(`refs-${p.id}`);
-            try {
-                const r = await fetch(`/api/pins/${p.id}/contracts?limit=10&${filterParams(false)}`);
-                const rows = r.ok ? await r.json() : [];
-                el.innerHTML = rows.length
-                    ? rows.map(x => refLine(x.bid_ref, peso(x.abc) + (x.derived ? ' <small title="Contract budget was blank; this is the sum of its item budgets">from items</small>' : ""), esc(x.title))).join("") +
-                      (p.contracts > rows.length ? `<li class="more">Showing ${rows.length} of ${p.contracts} contracts</li>` : "")
-                    : `<li class="more">No contracts to show.</li>`;
-            } catch { el.innerHTML = `<li class="more">Could not load contracts.</li>`; }
-        },
+             `<dl><dt>Contracts</dt><dd>${p.contracts}</dd>` +
+             `<dt>Total budget</dt><dd>${peso(p.total_budget)}</dd></dl>` +
+             `<ul class="refs" id="refs-${p.id}"><li class="more">Loading contracts...</li></ul></div>`,
+async (p, marker) => {
+    try {
+        const r = await fetch(
+            `/api/pins/${p.id}/contracts?limit=10&${filterParams(false)}`
+        );
+
+        if (!r.ok) {
+            throw new Error(`HTTP ${r.status}`);
+        }
+
+        const rows = await r.json();
+
+        // Get the currently open popup belonging to this marker
+        const popupEl = marker.getPopup()?.getElement();
+        if (!popupEl) return;
+
+        const el = popupEl.querySelector(`#refs-${p.id}`);
+        if (!el) return;
+
+        el.innerHTML = rows.length
+            ? rows.map(x =>
+                refLine(
+                    x.bid_ref,
+                    peso(x.abc) + (
+                        x.derived
+                            ? ' <small title="Contract budget was blank; this is the sum of its item budgets">from items</small>'
+                            : ""
+                    ),
+                    esc(x.title),
+                    x.award_id
+                )
+            ).join("") +
+            (p.contracts > rows.length
+                ? `<li class="more">Showing ${rows.length} of ${p.contracts} contracts</li>`
+                : "")
+            : `<li class="more">No contracts to show.</li>`;
+
+    } catch (error) {
+        console.error("Could not load contracts for agency:", p.id, error);
+
+        const popupEl = marker.getPopup()?.getElement();
+        const el = popupEl?.querySelector(`#refs-${p.id}`);
+
+        if (el) {
+            el.innerHTML =
+                `<li class="more">Could not load contracts. Please try again.</li>`;
+        }
+    }
+},
+
         p => `<li><button class="row" data-id="${p.id}"><span class="name">${esc(p.entities)}</span>` +
              `<span class="addr">${esc(p.address)}</span>` +
              `<span class="meta"><b>${p.contracts}</b> contracts, ${peso(p.total_budget)}</span></button></li>`,
@@ -195,8 +245,12 @@ async function loadItems(itemQ) {
                 const d = r.ok ? await r.json() : null;
                 const lines = d ? d.a.lines : [];
                 el.innerHTML = lines.length
-                    ? lines.slice(0, 10).map(l => refLine(l.bid_ref, l.comparable ? peso(l.unit_budget) + " each" : (l.item_budget != null ? peso(l.item_budget) + " total" : "n/a"),
-                        `${esc(l.item)}, ${num(l.quantity)} ${esc(l.uom || "")}`)).join("") +
+                    ? lines.slice(0, 10).map(l => refLine(
+                          l.bid_ref, 
+                          l.comparable ? peso(l.unit_budget) + " each" : (l.item_budget != null ? peso(l.item_budget) + " total" : "n/a"), 
+                          `${esc(l.item)}, ${num(l.quantity)} ${esc(l.uom || "")}`, 
+                          l.award_id
+                      )).join("") + 
                       (lines.length > 10 ? `<li class="more">Showing 10 of ${lines.length} items</li>` : "")
                     : `<li class="more">No items to show.</li>`;
             } catch { el.innerHTML = `<li class="more">Could not load items.</li>`; }
@@ -396,7 +450,10 @@ async function showCompare() {
                  <td>
                    <div class="cmp-item-title">${esc(l.item)}</div>
                    <div class="cmp-meta-badges">
-                     <span class="ref">${esc(l.bid_ref)}</span>
+                     <a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(l.award_id || l.bid_ref)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="View PhilGEPS Award Notice">
+                       <!-- Changed to display the award_id inside the badge -->
+                       <span class="ref">${esc(l.award_id || l.bid_ref)} ↗</span>
+                     </a>
                      ${l.status ? `<span class="cmp-status-badge">${esc(l.status)}</span>` : ""}
                      ${l.published ? `<span class="cmp-date">${formatDate(l.published)}</span>` : ""}
                    </div>
@@ -411,11 +468,11 @@ async function showCompare() {
     c.hidden = false;
     c.innerHTML = `
         <div class="cmp-header">
-            <div>
+            <div style="flex: 0 0 80%;">
                 <h2>Price Benchmark Comparison</h2>
-                <p class="cmp-subtitle">Query: "${esc(itemQ)}"</p>
+                <p class="cmp-subtitle">For: "${esc(itemQ)}"</p>
             </div>
-            <button class="btn ghost" id="closeCmp">Close</button>
+            <button class="btn ghost" id="closeCmp" style="flex: 0 0 20%; width: auto;">Close</button>
         </div>
 
         <div class="cmp-grid">
@@ -542,19 +599,21 @@ window.addEventListener("DOMContentLoaded", () => {
     minInput.value = "1000";
     maxInput.value = "10000000";
     updatePriceRange("min");
+    updatePriceRange("max");
 });
 
-// for getting date
+// for getting date safely
 function updateDataDate() {
-    const today = new Date();
+    const el = $("dataDate");
+    if (!el) return; // Exit quietly if the element doesn't exist in HTML
 
-    $("dataDate").textContent =
-        new Intl.DateTimeFormat("en-PH", {
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-            timeZone: "Asia/Manila"
-        }).format(today);
+    const today = new Date();
+    el.textContent = new Intl.DateTimeFormat("en-PH", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "Asia/Manila"
+    }).format(today);
 }
 
 updateDataDate();
