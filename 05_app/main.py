@@ -79,7 +79,7 @@ def filters():
 
 
 @app.get("/api/pins")
-def pins(q: str | None = None, min_budget: float = 0,
+def pins(q: str | None = None, min_budget: float = 0, max_budget: float | None = None,
          min_lon: float = -180, min_lat: float = -90,
          max_lon: float = 180, max_lat: float = 90, f: dict = Depends(filter_params)):
     """One pin per address, with contract counts and budget totals (GeoJSON)."""
@@ -107,6 +107,9 @@ def pins(q: str | None = None, min_budget: float = 0,
     sql += " GROUP BY a.id, a.clean_address, a.lat, a.lon, a.geo_precision"
     sql += " HAVING total_budget >= %s"
     args.append(min_budget)
+    if max_budget is not None:
+        sql += " AND total_budget <= %s"
+        args.append(max_budget)
     rows = query(sql, args)
     return {"type": "FeatureCollection", "features": [
         {"type": "Feature",
@@ -240,7 +243,8 @@ def fetch_rows(q, address_ids=None, filters=None, min_budget=0, max_budget=None)
     if min_budget > 0:
         where.append("i.item_budget >= %s")
         args.append(min_budget)
-    if max_budget and max_budget < 10000000:
+
+    if max_budget is not None:
         where.append("i.item_budget <= %s")
         args.append(max_budget)
 
@@ -325,9 +329,13 @@ def item_pins(q: str = Query(..., min_length=2, max_length=200),
 
 @app.get("/api/items/compare")
 def item_compare(q: str = Query(..., min_length=2, max_length=200), a: int = 0, b: int = 0,
+                 min_budget: float = 0, max_budget: float = 10000000, # <--- Added these!
                  f: dict = Depends(filter_params)):
     """Side-by-side price stats and item lines for two locations."""
-    rows, truncated = fetch_rows(q, [a, b], f)
+    
+    # Pass the budgets into fetch_rows so the comparison tray matches the map!
+    rows, truncated = fetch_rows(q, [a, b], f, min_budget, max_budget) 
+    
     result = {"truncated": truncated}
     for key, aid in (("a", a), ("b", b)):
         rs = sorted((r for r in rows if r["address_id"] == aid),

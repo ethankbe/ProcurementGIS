@@ -222,12 +222,12 @@ async (p, marker) => {
 async function loadItems(itemQ) {
     const params = filterParams(true);
 
-    const minB = $("minInput").value;
-    const maxB = $("maxInput").value;
-    if (minB) params.set("min_budget", minB);
-    if (maxB) params.set("max_budget", maxB);
+    params.set("min_budget", $("minInput").value);
+    params.set("max_budget", $("maxInput").value);
 
-    const res = await fetch("/api/items/pins?q=" + encodeURIComponent(itemQ) + "&" + filterParams(true));
+    const res = await fetch(
+        `/api/items/pins?q=${encodeURIComponent(itemQ)}&${params.toString()}`
+    );
     if (!res.ok) { $("status").textContent = "Type at least 2 characters to search items."; return; }
     const data = await res.json();
     
@@ -541,7 +541,7 @@ fetch("/api/filters").then(r => r.ok ? r.json() : null)
     }).finally(refresh);
 
 
-// --- Price Range Slider Logic ---
+
 // --- Price Range Slider Logic ---
 const minSlider = $("minb");
 const maxSlider = $("maxb");
@@ -567,20 +567,21 @@ function updatePriceRange(source) {
     minInput.value = min;
     maxInput.value = max;
 
-    // Update UI Labels
+    // Update UI labels
     $("minLabel").textContent = "₱" + min.toLocaleString("en-PH");
     $("maxLabel").textContent = max >= 10000000
-            ? "₱10,000,000+"
-            : "₱" + max.toLocaleString("en-PH");
-            
-    // Trigger map refresh and count update
+        ? "₱10,000,000+"
+        : "₱" + max.toLocaleString("en-PH");
+
     countFilters();
     later();
 }
 
+// Update when either slider moves
 minSlider.addEventListener("input", () => updatePriceRange("min"));
 maxSlider.addEventListener("input", () => updatePriceRange("max"));
 
+// Update when manually entering prices
 minInput.addEventListener("change", () => {
     minSlider.value = Math.min(
         10000000,
@@ -597,15 +598,12 @@ maxInput.addEventListener("change", () => {
     updatePriceRange("max");
 });
 
-// --- FORCE RESET ON INITIAL LOAD ---
-// Clears out any cached browser values when the page refreshes
+// Reset slider values on initial load
 window.addEventListener("DOMContentLoaded", () => {
     minSlider.value = "1000";
     maxSlider.value = "10000000";
-    minInput.value = "1000";
-    maxInput.value = "10000000";
+
     updatePriceRange("min");
-    updatePriceRange("max");
 });
 
 // for getting date safely
