@@ -129,15 +129,17 @@ function focusLoc(id) {
 }
 
 const refLine = (ref, right, text, awardId = null, awardee = null) => {
-    const displayId = awardId || ref;
-    
-    // Create a sleek tag for the awardee if data exists
-    const awardeeHtml = awardee ? `<div style="font-size: 11px; color: var(--muted, #64748b); margin-top: 6px; padding-left: 4px"><strong>Supplier:</strong> ${esc(awardee)}</div>` : "";
+    const awardeeHtml = awardee ? `<div style="font-size: 11px; color: var(--muted, #64748b); margin-top: 4px; padding-left: 4px;"><strong>Supplier:</strong> ${esc(awardee)}</div>` : "";
+
+    // Conditional rendering for the badge
+    const badgeHtml = awardId 
+        ? `<a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(awardId)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="Click to view full details">
+             <span class="ref">${esc(awardId)} ↗</span>
+           </a>`
+        : `<span class="ref" style="cursor: help;" title="Bid Reference Number">${esc(ref)}</span>`;
 
     return `<li><div class="top">` +
-    `<a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(displayId)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="View PhilGEPS Award Notice">` +
-    `<span class="ref" title="Award Notice Number">${esc(displayId)} ↗</span>` +
-    `</a>` +
+    badgeHtml +
     `<span class="amt">${right}</span></div><div class="t">${text}</div>${awardeeHtml}</li>`;
 };
 
@@ -452,10 +454,12 @@ const renderLines = (X) => X.lines.length
                    <!-- Awardee tag added right below the title -->
                    ${l.awardee ? `<div style="font-size: 11px; color: var(--muted, #64748b); margin-top: 4px;"><strong>Supplier:</strong> ${esc(l.awardee)}</div>` : ""}
                    <div class="cmp-meta-badges">
-                     <a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(l.award_id || l.bid_ref)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="View PhilGEPS Award Notice">
-                       <!-- Changed to display the award_id inside the badge -->
-                       <span class="ref">${esc(l.award_id || l.bid_ref)} ↗</span>
-                     </a>
+                     ${l.award_id 
+                       ? `<a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(l.award_id)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="Click to view full details">
+                            <span class="ref">${esc(l.award_id)} ↗</span>
+                          </a>` 
+                       : `<span class="ref" style="cursor: help;" title="Bid Reference Number">${esc(l.bid_ref)}</span>`
+                     }
                      ${l.status ? `<span class="cmp-status-badge">${esc(l.status)}</span>` : ""}
                      ${l.published ? `<span class="cmp-date">${formatDate(l.published)}</span>` : ""}
                    </div>
