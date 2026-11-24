@@ -1,6 +1,6 @@
 /**
- * Procurement Price Monitoring System
- * Handles Map UI, PhilGEPS API fetching, and filtering logic.
+- Procurement Price Monitoring System
+- Handles Map UI, PhilGEPS API fetching, and filtering logic.
  */
 
 // --- Utility Functions ---
@@ -102,16 +102,13 @@ const pesoCompact = n => {
     for (const { div, suffix } of units) {
         if (abs >= div) {
             const raw = abs / div;
-            // If raw has more than 3 digits before the decimal (e.g., 1500k), let the next unit or 3-sig-fig ceil handle it
             if (raw >= 1000 && suffix !== "B") continue;
 
-            // Round up so total digits (before + after decimal) stay <= 3
             const intDigits = Math.max(1, Math.floor(Math.log10(raw)) + 1);
             const decimals = Math.max(0, 3 - intDigits);
             const factor = Math.pow(10, decimals);
             let ceiled = Math.ceil(raw * factor) / factor;
 
-            // If rounding up pushes 999.something to 1000, step up cleanly
             if (ceiled >= 1000 && suffix === "k") {
                 const mVal = Math.ceil((abs / 1e6) * 100) / 100;
                 const sign = n < 0 ? "-" : "";
@@ -310,7 +307,7 @@ function renderSummary(summary) {
                 : "Whole-lot contract totals; not unit prices.") +
           `</div>` +
         `</div>`;
-    
+
     syncRegChipWidth(el);
     el._lastSummary = summary;
 }
@@ -320,7 +317,6 @@ function syncRegChipWidth(container = $("summary")) {
     const chips = [...container.querySelectorAll(".reg-chip")];
     if (!chips.length) return;
 
-    // Reset first so shrinking/changing searches can measure accurately
     chips.forEach(chip => {
         chip.style.removeProperty("--reg-chip-w");
     });
@@ -486,7 +482,7 @@ let layer = null,
     markers = {},
     props = {},
     selected = [],
-    fitNext = true,
+    fitNext = false,
     lastMode = "",
     timer = null,
     trayCollapsed = false,
@@ -522,7 +518,6 @@ function render(data, popupFn, onOpen, rowFn, sortFn) {
 
     const isItemSearch = Boolean($("item").value.trim());
 
-    // Find the global lowest min_unit and highest max_unit across all matching locations
     let globalMin = Infinity, globalMax = -Infinity;
     if (isItemSearch) {
         data.features.forEach(f => {
@@ -546,7 +541,6 @@ function render(data, popupFn, onOpen, rowFn, sortFn) {
 
     const getZOffset = tone => (tone === "low" || tone === "high") ? 500 : 0;
 
-    // Create GeoJSON layer with soft-halo nodes
     layer = L.geoJSON(data, {
         pointToLayer: (f, ll) => {
             const p = f.properties;
@@ -582,13 +576,11 @@ function render(data, popupFn, onOpen, rowFn, sortFn) {
         }
     }).addTo(map);
 
-    // Update the right sidebar list
     const rows = data.features.map(f => f.properties).sort(sortFn);
     $("list").innerHTML = rows.map(rowFn).join("");
 
     markCompare();
 
-    // Adjust map bounds to fit new data with tighter framing
     if (fitNext && rows.length) {
         fitNext = false;
         map.fitBounds(layer.getBounds().pad(0.08), { maxZoom: 14 });
@@ -820,7 +812,6 @@ async function loadAgencies() {
                `<div class="pop-actions">` +
                  `<button type="button" class="btn pop-btn contract-details-btn" id="all-${p.id}" data-id="${p.id}">` +
                    `<span>View all agency contracts</span>` +
-                //    `<span>View all ${p.contracts} contracts</span>` +
                  `</button>` +
                `</div>` +
              `</div>`,
@@ -1024,6 +1015,8 @@ async function loadItems(itemQ) {
 }
 
 async function refresh() {
+    saveFilterState();
+
     const itemQ = $("item").value.trim();
     const mode = itemQ ? "item:" + itemQ : "agency";
     if (mode !== lastMode) {
@@ -1032,12 +1025,7 @@ async function refresh() {
         selected = []; // a new search starts a fresh comparison
     }
 
-    const mapMode = $("mapMode");
-    if (mapMode) {
-        mapMode.innerHTML = itemQ
-            ? '<span class="mode-kicker">View by:</span> Item'
-            : '<span class="mode-kicker">View by:</span> Agency location';
-    }
+    syncMapMode();
 
     try {
         await (itemQ ? loadItems(itemQ) : loadAgencies());
@@ -1069,11 +1057,9 @@ function filterParams(forItems) {
         else if (!forItems) p.set("q", a);
     }
 
-    // Apply Price Range Filters globally
     const minB = $("minInput").value;
     const maxB = $("maxInput").value;
 
-    // Only append to the URL if they have been moved from their absolute extremes
     if (minB && Number(minB) > 1000) {
         p.set("min_budget", minB);
     }
@@ -1103,7 +1089,7 @@ function fillFilters() {
     const sortedCategories = [...(F.categories || [])].sort((a, b) =>
         String(valOf(a) ?? "").localeCompare(String(valOf(b) ?? ""), undefined, { sensitivity: "base" })
     );
-    
+
     keep("f-region", opts(F.regions, "All Regions"));
     keep("f-province", opts((F.provinces || []).filter(x => !r || x.region === r), "All Provinces"));
     keep("f-city", opts((F.cities || []).filter(x => (!r || x.region === r) && (!pr || x.province === pr)), "All Cities"));
@@ -1142,6 +1128,7 @@ $("clearF").onclick = () => {
     $("q").value = "";
     $("item").value = "";
     syncClearSearch();
+    try { sessionStorage.removeItem(FILTER_STORAGE_KEY); } catch (e) {}
 
     // Reset price range
     $("minInput").value = "1000"; $("maxInput").value = "10000000";
@@ -1513,24 +1500,95 @@ document.addEventListener("keydown", e => {
     closeContractDrawer();
 });
 
+const FILTER_STORAGE_KEY = "procurement-filters-v1";
 
-// --- Initialization Call ---
-fetch("/api/filters").then(r => r.ok ? r.json() : null)
-    .then(f => {
-        if (f) {
-            FILTERS = f;
-            fillFilters();
+function saveFilterState() {
+    try {
+        const state = {
+            item: $("item").value,
+            q: $("q").value,
+            region: $("f-region").value,
+            province: $("f-province").value,
+            city: $("f-city").value,
+            category: $("f-category").value,
+            status: $("f-status").value,
+            minb: $("minInput").value,
+            maxb: $("maxInput").value,
+        };
+        sessionStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {}
+}
 
-            if (f.last_updated) {
-                $("last-updated").textContent = f.last_updated;
-            } else {
-                $("last-updated").textContent = "Unknown Date";
-            }
+function restoreFilterState() {
+    try {
+        const raw = sessionStorage.getItem(FILTER_STORAGE_KEY);
+        if (!raw) return;
+        const s = JSON.parse(raw);
+
+        if (s.item != null) {
+            $("item").value = s.item;
+            syncClearSearch();
         }
-    })
-    .catch(() => {
-        $("last-updated").textContent = "Offline";
-    }).finally(refresh);
+        if (s.q != null) {
+            $("q").value = s.q;
+        }
+
+        // Restore cascading location dropdowns step-by-step so child options exist
+        if (s.region && [...$("f-region").options].some(o => o.value === s.region)) {
+            $("f-region").value = s.region;
+            fillFilters();
+        }
+        if (s.province && [...$("f-province").options].some(o => o.value === s.province)) {
+            $("f-province").value = s.province;
+            fillFilters();
+        }
+        if (s.city && [...$("f-city").options].some(o => o.value === s.city)) {
+            $("f-city").value = s.city;
+            fillFilters();
+        }
+
+        if (s.category && [...$("f-category").options].some(o => o.value === s.category)) {
+            $("f-category").value = s.category;
+        }
+        if (s.status && [...$("f-status").options].some(o => o.value === s.status)) {
+            $("f-status").value = s.status;
+        }
+
+        if (typeof syncCustomSelect === "function") {
+            Object.values(SEL).forEach(id => {
+                if ($(id)) syncCustomSelect($(id));
+            });
+        }
+
+        if (s.minb != null && s.maxb != null) {
+            $("minb").value = s.minb;
+            $("maxb").value = s.maxb;
+            updatePriceRange("min", false);
+        }
+
+        // Sync agency × clear button if defined
+        const clearAgencyBtn = $("clear-agency");
+        if (clearAgencyBtn) {
+            const hasAgency = $("q").value.trim() !== "";
+            $("q").classList.toggle("has-value", hasAgency);
+            clearAgencyBtn.hidden = !hasAgency;
+        }
+
+        countFilters();
+    } catch (e) {}
+}
+
+
+const FILTERS_DATA_CACHE_KEY = "procurement-filters-data-v1";
+
+function syncMapMode() {
+    const mapMode = $("mapMode");
+    if (!mapMode) return;
+    const hasItem = Boolean($("item")?.value.trim());
+    mapMode.innerHTML = hasItem
+        ? '<span class="mode-kicker">View by:</span> Item'
+        : '<span class="mode-kicker">View by:</span> Agency location';
+}
 
 
 // --- Price Range Slider Logic ---
@@ -1539,7 +1597,7 @@ const maxSlider = $("maxb");
 const minInput = $("minInput");
 const maxInput = $("maxInput");
 
-function updatePriceRange(source) {
+function updatePriceRange(source, triggerRefresh = true) {
     let min = Number(minSlider.value);
     let max = Number(maxSlider.value);
 
@@ -1565,7 +1623,7 @@ function updatePriceRange(source) {
         : "₱" + max.toLocaleString("en-PH");
 
     countFilters();
-    later();
+    if (triggerRefresh) later();
 }
 
 minSlider.addEventListener("input", () => updatePriceRange("min"));
@@ -1587,11 +1645,83 @@ maxInput.addEventListener("change", () => {
     updatePriceRange("max");
 });
 
-window.addEventListener("DOMContentLoaded", () => {
-    minSlider.value = "1000";
-    maxSlider.value = "10000000";
-    updatePriceRange("min");
-});
+function restoreInstantState() {
+    try {
+        const raw = sessionStorage.getItem(FILTER_STORAGE_KEY);
+        if (!raw) return;
+        const s = JSON.parse(raw);
+
+        if (s.item != null) {
+            $("item").value = s.item;
+            syncClearSearch();
+            syncMapMode();
+        }
+        if (s.q != null) {
+            $("q").value = s.q;
+            const clearAgencyBtn = $("clear-agency");
+            if (clearAgencyBtn) {
+                const hasAgency = $("q").value.trim() !== "";
+                $("q").classList.toggle("has-value", hasAgency);
+                clearAgencyBtn.hidden = !hasAgency;
+            }
+        }
+        if (s.minb != null && s.maxb != null) {
+            minSlider.value = s.minb;
+            maxSlider.value = s.maxb;
+            minInput.value = s.minb;
+            maxInput.value = s.maxb;
+            updatePriceRange("min", false);
+        }
+    } catch (e) {}
+}
+
+restoreInstantState();
+
+// Hydrate immediately from cached /api/filters data if available (zero blank flash)
+try {
+    const cachedFiltersRaw = sessionStorage.getItem(FILTERS_DATA_CACHE_KEY);
+    if (cachedFiltersRaw) {
+        const cachedFilters = JSON.parse(cachedFiltersRaw);
+        if (cachedFilters) {
+            FILTERS = cachedFilters;
+            fillFilters();
+            restoreFilterState();
+            if (cachedFilters.last_updated) {
+                $("last-updated").textContent = cachedFilters.last_updated;
+            }
+        }
+    }
+} catch (e) {}
+
+// Keep initial mode synced with restored search so initial refresh keeps DEFAULT_VIEW (same as Reset Zoom)
+const initialItemQ = $("item").value.trim();
+lastMode = initialItemQ ? "item:" + initialItemQ : "agency";
+fitNext = false;
+
+// Fetch fresh /api/filters in the background and sync
+fetch("/api/filters").then(r => r.ok ? r.json() : null)
+    .then(f => {
+        if (f) {
+            const prevSerialized = FILTERS ? JSON.stringify(FILTERS) : "";
+            const nextSerialized = JSON.stringify(f);
+
+            FILTERS = f;
+            try { sessionStorage.setItem(FILTERS_DATA_CACHE_KEY, nextSerialized); } catch (e) {}
+
+            if (prevSerialized !== nextSerialized) {
+                fillFilters();
+                restoreFilterState();
+            }
+
+            $("last-updated").textContent = f.last_updated || "Unknown Date";
+        }
+    })
+    .catch(() => {
+        if (!FILTERS) {
+            $("last-updated").textContent = "Offline";
+        }
+    })
+    .finally(refresh);
 
 function updateDataDate() {
     const el = $("dataDate");
