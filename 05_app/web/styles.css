@@ -3101,6 +3101,7 @@ select {
     padding: 4px;
     list-style: none;
     overflow-y: auto;
+    overscroll-behavior: contain;
     scrollbar-width: thin;
     scrollbar-color: var(--line) transparent;
     border: 1px solid var(--line-strong);

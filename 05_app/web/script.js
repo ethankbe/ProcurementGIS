@@ -1100,10 +1100,14 @@ function fillFilters() {
         else s.value = "";
     };
 
+    const sortedCategories = [...(F.categories || [])].sort((a, b) =>
+        String(valOf(a) ?? "").localeCompare(String(valOf(b) ?? ""), undefined, { sensitivity: "base" })
+    );
+    
     keep("f-region", opts(F.regions, "All Regions"));
     keep("f-province", opts((F.provinces || []).filter(x => !r || x.region === r), "All Provinces"));
     keep("f-city", opts((F.cities || []).filter(x => (!r || x.region === r) && (!pr || x.province === pr)), "All Cities"));
-    keep("f-category", opts(F.categories, "All Categories"));
+    keep("f-category", opts(sortedCategories, "All Categories"));
     keep("f-status", opts(F.statuses, "All Statuses"));
 
     $("agencylist").innerHTML = (F.agencies || [])
