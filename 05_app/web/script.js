@@ -521,7 +521,7 @@ let layer = null,
     fitNext = false,
     lastMode = "",
     timer = null,
-    trayCollapsed = false,
+    trayCollapsed = true,
     activePopupAbort = null;
 
 const popupContractsCache = {};
@@ -1059,6 +1059,7 @@ async function refresh() {
         fitNext = true;
         lastMode = mode;
         selected = []; // a new search starts a fresh comparison
+        trayCollapsed = true;
     }
 
     syncMapMode();
