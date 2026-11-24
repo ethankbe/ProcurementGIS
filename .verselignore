@@ -1,0 +1,7 @@
+venv/
+01_prepare/
+02_addresses/
+03_geocode/
+04_database/
+*.csv
+*.jsonl
