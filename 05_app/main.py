@@ -30,12 +30,28 @@ def db_password():
     return pw
 
 
+def db_ssl_args():
+    ca = os.environ.get("DB_SSL_CA")
+    if not ca:
+        for path in ("/etc/ssl/cert.pem",
+                     "/etc/ssl/certs/ca-certificates.crt"):
+            if os.path.exists(path):
+                ca = path
+                break
+    return {"ssl": {"ca": ca}} if ca else {}
+
+
 def query(sql, args=()):
-    con = pymysql.connect(host=os.environ.get("DB_HOST", "localhost"),
-                          user=os.environ.get("DB_USER", "philgeps_app"),
-                          password=db_password(),
-                          database=os.environ.get("DB_NAME", "philgeps"),
-                          charset="utf8mb4", cursorclass=DictCursor)
+    con = pymysql.connect(
+        host=os.environ.get("DB_HOST", "localhost"),
+        port=int(os.environ.get("DB_PORT", "3306")),
+        user=os.environ.get("DB_USER", "philgeps_app"),
+        password=db_password(),
+        database=os.environ.get("DB_NAME", "philgeps"),
+        charset="utf8mb4",
+        cursorclass=DictCursor,
+        **db_ssl_args(),
+    )
     try:
         with con.cursor() as cur:
             cur.execute(sql, args)
@@ -128,7 +144,7 @@ def pins(q: str | None = None, min_budget: float = 0, max_budget: float | None =
     """
     args = budget_args + [min_lat, max_lat, min_lon, max_lon]
     if q:
-        sql += " AND e.name LIKE %s"
+        sql += " AND LOWER(COALESCE(e.name,'')) LIKE LOWER(%s)"
         args.append(f"%{q}%")
     fc, fa = filter_sql(f)
     for cond in fc:
@@ -549,7 +565,11 @@ def search_clause(groups):
         for alts in parts:
             inner = []
             for a in alts:
-                inner.append("(i.item_name LIKE %s OR i.item_desc LIKE %s OR c.title LIKE %s)")
+                inner.append(
+                    "(LOWER(COALESCE(i.item_name,'')) LIKE LOWER(%s) "
+                    "OR LOWER(COALESCE(i.item_desc,'')) LIKE LOWER(%s) "
+                    "OR LOWER(COALESCE(c.title,'')) LIKE LOWER(%s))"
+                )
                 args += [like(a.split()[0])] * 3
             ands.append("(" + " OR ".join(inner) + ")")
         ors.append("(" + " AND ".join(ands) + ")")
@@ -917,8 +937,12 @@ def item_suggest(q: str = Query(..., min_length=2, max_length=60)):
     for hit in difflib.get_close_matches(ql, vocab, n=5, cutoff=0.8):
         if hit not in out:
             out.append(hit)
-    rows = query("""SELECT item_name, COUNT(*) AS n FROM items WHERE item_name LIKE %s
-                    GROUP BY item_name ORDER BY n DESC LIMIT 10""", (like(q.strip()),))
+    rows = query(
+        "SELECT item_name, COUNT(*) AS n FROM items "
+        "WHERE LOWER(COALESCE(item_name,'')) LIKE LOWER(%s) "
+        "GROUP BY item_name ORDER BY n DESC LIMIT 10",
+        (like(q.strip()),)
+    )
     seen = {o.lower() for o in out}
     for r in rows:
         name = (r["item_name"] or "").strip()

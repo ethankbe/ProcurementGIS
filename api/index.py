@@ -1,8 +1,7 @@
+import os
 import sys
-from pathlib import Path
 
-APP_DIR = Path(__file__).resolve().parent.parent / "05_app"
-if str(APP_DIR) not in sys.path:
-    sys.path.insert(0, str(APP_DIR))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "05_app"))
 
-from main import app  # noqa: E402, F401
+from main import app

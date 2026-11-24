@@ -160,6 +160,8 @@ def main():
     ap.add_argument("--host", default="localhost")
     ap.add_argument("--user", default="philgeps_app")
     ap.add_argument("--db", default="philgeps")
+    ap.add_argument("--port", type=int,
+                default=int(os.environ.get("DB_PORT", "3306")))
     args = ap.parse_args()
     if args.dry_run:
         print("MODE: DRY RUN — this report does not change MySQL.")
@@ -397,8 +399,25 @@ def main():
         sys.exit("ERROR: run  python3 -m pip install pymysql  first")
     schema = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
 
-    con = pymysql.connect(host=args.host, user=args.user, password=db_password(),
-                          database=args.db, charset="utf8mb4")
+        ca = os.environ.get("DB_SSL_CA")
+        if not ca:
+            for path in ("/etc/ssl/cert.pem",
+                        "/etc/ssl/certs/ca-certificates.crt"):
+                if os.path.exists(path):
+                    ca = path
+                    break
+
+        ssl_args = {"ssl": {"ca": ca}} if ca else {}
+
+        con = pymysql.connect(
+            host=args.host,
+            port=args.port,
+            user=args.user,
+            password=db_password(),
+            database=args.db,
+            charset="utf8mb4",
+            **ssl_args,
+        )
     cur = con.cursor()
     for stmt in open(schema).read().split(";"):
         if stmt.strip():
