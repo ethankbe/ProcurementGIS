@@ -25,25 +25,23 @@
     <!-- ===================== HEADER ===================== -->
     <header class="top-header">
         <div class="brand">
-            <span class="brand-mark" aria-hidden="true">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
-                     fill="none" stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 6h18"></path>
-                    <path d="M3 12h12"></path>
-                    <path d="M3 18h8"></path>
-                    <circle cx="18" cy="17" r="3"></circle>
+             <div class="brand-mark" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2.1"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="20" r="1.5"></circle>
+                    <circle cx="17" cy="20" r="1.5"></circle>
+                    <path d="M2.5 3h2.2l2.4 11.5a1.5 1.5 0 0 0 1.5 1.2h8.9a1.5 1.5 0 0 0 1.45-1.12L21 7.5H6.1"></path>
                 </svg>
-            </span>
+            </div>
             <div class="brand-copy">
-                <h1>Who buys what?</h1>
-                <p>PhilGEPS ICT procurement map · nationwide</p>
+                <h1>Who Buys What?</h1>
+                <p>PhilGEPS ICT Procurement Map</p>
             </div>
         </div>
 
         <div class="header-right">
-            <div class="header-meta" title="Most recent data load">
-                <span class="live-dot" aria-hidden="true"></span>
+            <div class="header-meta" title="Most recent data from the csv">
                 <span>Data as of <strong id="last-updated">Loading…</strong></span>
             </div>
             <button type="button" id="themeToggle" class="icon-btn"
@@ -56,89 +54,116 @@
 
         <!-- ===================== LEFT: SEARCH / FILTERS ===================== -->
         <aside class="sidebar sidebar-left" aria-label="Search and filters">
-            <div class="side-head">
-                <div>
-                    <span class="eyebrow">Find</span>
-                    <h2>Search &amp; filters</h2>
-                </div>
-                <span id="fcount" class="filter-count" aria-live="polite"></span>
-            </div>
-
-            <!-- Primary search -->
-            <div class="filter-group search-group">
-                <label for="item">Item or category</label>
-                <div class="search-input-wrapper">
-                    <input id="item" type="search" list="itemlist"
-                           placeholder="e.g. laptop, printer ink, Award 31637"
-                           autocomplete="on" aria-describedby="item-hint">
-                    <button type="button" id="clear-search" class="clear-search-btn"
-                            title="Clear search" aria-label="Clear search" hidden>&times;</button>
-                    <span class="search-icon" aria-hidden="true">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17"
+            <!-- Fixed top header + search -->
+            <div class="sidebar-top">
+                <div class="side-head">
+                    <div class="side-title-row">
+                        <svg class="filter-glyph" xmlns="http://www.w3.org/2000/svg" width="16" height="16"
                              viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <path d="m21 21-4.35-4.35"></path>
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
                         </svg>
-                    </span>
-                    <datalist id="itemlist"></datalist>
+                        <h2>Search & Filters</h2>
+                    </div>
+
+                    <div class="side-head-actions">
+                        <span id="fcount" class="sr-only" aria-live="polite"></span>
+                        <button class="reset-pill" id="clearF" type="button" hidden>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2.4"
+                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                                <path d="M3 3v5h5"></path>
+                            </svg>
+                            <span>Clear</span>
+                        </button>
+                        <button class="btn" id="applyF" type="button" hidden>Apply</button>
+                    </div>
                 </div>
-                <p class="hint" id="item-hint">Bid/Award numbers also work · commas = alternatives · quotes = exact phrase · plurals and small typos are handled</p>
+
+                <!-- Pill Search -->
+                <div class="search-block">
+                    <label class="sr-only" for="item">Search item or category</label>
+                    <div class="search-input-wrapper ac-anchor">
+                        <span class="search-icon" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <path d="m21 21-4.35-4.35"></path>
+                            </svg>
+                        </span>
+                        <input id="item" type="search"
+                               placeholder="e.g. laptop, printer ink, Award ID…"
+                               autocomplete="off" aria-describedby="item-hint">
+                        <button type="button" id="clear-search" class="clear-search-btn"
+                                title="Clear search" aria-label="Clear search" hidden>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2.6"
+                                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M18 6 6 18"></path>
+                                <path d="m6 6 12 12"></path>
+                            </svg>
+                        </button>
+                        <datalist id="itemlist"></datalist>
+                    </div>
+                    <p class="hint" id="item-hint">Supports Bid/Award IDs, use quotes for exact phrases and commas for alternatives.</p>
+                </div>
             </div>
 
-            <!-- Location -->
-            <details class="filter-section" open>
-                <summary>Location</summary>
-                <div class="filter-body">
-                    <select id="f-region" aria-label="Region"></select>
-                    <select id="f-province" aria-label="Province"></select>
-                    <select id="f-city" aria-label="City or municipality"></select>
-                </div>
-            </details>
-
-            <!-- Budget -->
-            <details class="filter-section">
-                <summary>Budget range</summary>
-                <div class="filter-body">
-                    <div class="range-values">
-                        <span id="minLabel">₱1,000</span>
-                        <span id="maxLabel">₱10,000,000+</span>
+            <!-- Scrollable filter cards -->
+            <div class="sidebar-scroll">
+                <!-- Location -->
+                <details class="filter-section" open>
+                    <summary>Location</summary>
+                    <div class="filter-body">
+                        <select id="f-region" aria-label="Region"></select>
+                        <select id="f-province" aria-label="Province"></select>
+                        <select id="f-city" aria-label="City or municipality"></select>
                     </div>
-                    <div class="range-slider">
-                        <input type="range" id="minb" min="1000" max="10000000" step="1000" value="1000" aria-label="Minimum budget">
-                        <input type="range" id="maxb" min="1000" max="10000000" step="1000" value="10000000" aria-label="Maximum budget">
+                </details>
+
+                <!-- Budget -->
+                <details class="filter-section" open>
+                    <summary>Budget range</summary>
+                    <div class="filter-body">
+                        <div class="range-values">
+                            <span id="minLabel">₱1,000</span>
+                            <span id="maxLabel">₱10,000,000+</span>
+                        </div>
+                        <div class="range-slider">
+                            <input type="range" id="minb" min="1000" max="10000000" step="1000" value="1000" aria-label="Minimum budget">
+                            <input type="range" id="maxb" min="1000" max="10000000" step="1000" value="10000000" aria-label="Maximum budget">
+                        </div>
+                        <div class="range-inputs">
+                            <input type="number" id="minInput" min="1000" value="1000" autocomplete="off" aria-label="Minimum budget value">
+                            <span class="range-sep">–</span>
+                            <input type="number" id="maxInput" min="1000" value="10000000" autocomplete="off" aria-label="Maximum budget value">
+                        </div>
                     </div>
-                    <div class="range-inputs">
-                        <input type="number" id="minInput" min="1000" value="1000" autocomplete="off" aria-label="Minimum budget value">
-                        <span>to</span>
-                        <input type="number" id="maxInput" min="1000" value="10000000" autocomplete="off" aria-label="Maximum budget value">
+                </details>
+
+                <!-- Agency / record -->
+                <details class="filter-section" open>
+                    <summary>Agency &amp; record</summary>
+                    <div class="filter-body">
+                        <label for="q">Agency</label>
+                        <div class="ac-anchor">
+                            <input id="q" class="agency-select-input" type="search"
+                                   placeholder="Type or select an agency" autocomplete="off">
+                            <datalist id="agencylist"></datalist>
+                        </div>
+
+                        <label for="f-category">Category</label>
+                        <select id="f-category"></select>
+
+                        <label for="f-status">Status</label>
+                        <select id="f-status"></select>
                     </div>
-                </div>
-            </details>
-
-            <!-- Agency / record -->
-            <details class="filter-section" open>
-                <summary>Agency &amp; record</summary>
-                <div class="filter-body">
-                    <label for="q">Agency</label>
-                    <input id="q" type="search" list="agencylist"
-                           placeholder="Start typing an agency" autocomplete="off">
-                    <datalist id="agencylist"></datalist>
-
-                    <label for="f-category">Category</label>
-                    <select id="f-category"></select>
-
-                    <label for="f-status">Status</label>
-                    <select id="f-status"></select>
-                </div>
-            </details>
-
-            <div class="filter-actions">
-                <button class="btn ghost" id="clearF" type="button">Reset filters</button>
-                <!-- Kept for compatibility; filters apply automatically. -->
-                <button class="btn" id="applyF" type="button" hidden>Apply filters</button>
+                </details>
             </div>
 
+            <!-- Fixed bottom note -->
             <p class="fine">
                 Source: PhilGEPS notices. Values are labelled <strong>per item (est.)</strong> or <strong>whole lot</strong>;
                 these are budgets, not prices paid. Pins mark the agency’s listed address.
@@ -148,21 +173,36 @@
         <!-- ===================== CENTER: MAP ===================== -->
         <main class="map-container">
             <div class="map-toolbar">
-                <div class="mode-pill">
-                    <span class="pulse" aria-hidden="true"></span>
-                    <span id="mapMode">Agency locations</span>
-                </div>
-
-                <details class="legend-menu">
-                    <summary>Legend</summary>
-                    <div class="legend-card">
-                        <div class="legend-row"><span class="legend-dot legend-blue"></span> Agency location</div>
-                        <div class="legend-row"><span class="legend-dot legend-green"></span> Lowest budget/unit</div>
-                        <div class="legend-row"><span class="legend-dot legend-red"></span> Highest budget/unit</div>
-                        <div class="legend-row"><span class="legend-dot legend-amber"></span> Selected pin</div>
-                    </div>
-                </details>
+            <div class="mode-pill">
+                <span class="pulse" aria-hidden="true"></span>
+                <span id="mapMode"><span class="mode-kicker">View by:</span> Agency location</span>
             </div>
+
+            <details class="legend-menu">
+                <summary>
+                    <svg class="legend-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 16v-4"></path>
+                        <path d="M12 8h.01"></path>
+                    </svg>
+                    <span>Legend</span>
+                    <svg class="legend-chevron" xmlns="http://www.w3.org/2000/svg" width="11" height="11"
+                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </summary>
+                <div class="legend-card">
+                    <!-- change accent -->
+                    <div class="legend-row"><span class="legend-dot legend-blue"></span> Agency location</div>
+                    <div class="legend-row"><span class="legend-dot legend-green"></span> Lowest budget/unit</div>
+                    <div class="legend-row"><span class="legend-dot legend-red"></span> Highest budget/unit</div>
+                    <div class="legend-row"><span class="legend-dot legend-amber"></span> Selected pin</div>
+                </div>
+            </details>
+        </div>
 
             <div id="map"></div>
             <div id="tray"></div>
@@ -173,11 +213,16 @@
         <!-- ===================== RIGHT: RESULTS ===================== -->
         <aside class="sidebar sidebar-right" aria-label="Results">
             <div class="side-head">
-                <div>
-                    <span class="eyebrow">Explore</span>
+                <div class="side-title-row">
+                    <svg class="loc-pin-glyph" xmlns="http://www.w3.org/2000/svg" width="15" height="15"
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+                        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
                     <h2>Locations</h2>
                 </div>
-                <span class="side-tip">Click a pin or card to inspect</span>
+                <span class="side-tip">Click a pin or card</span>
             </div>
 
             <div id="status" role="status" aria-live="polite">Loading locations…</div>
@@ -190,5 +235,269 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="script.js"></script>
+
+<script>
+(function () {
+    var clearBtn = document.getElementById('clearF');
+    var fcount = document.getElementById('fcount');
+    var itemInput = document.getElementById('item');
+    var agencyInput = document.getElementById('q');
+    var minB = document.getElementById('minb');
+    var maxB = document.getElementById('maxb');
+    var minInput = document.getElementById('minInput');
+    var maxInput = document.getElementById('maxInput');
+    var selectIds = ['f-region', 'f-province', 'f-city', 'f-category', 'f-status'];
+
+    function toTitleCase(str) {
+        var trimmed = (str || '').trim();
+        if (!trimmed) return '';
+
+        var keepUpper = /^(lan|wan|ict|it|pc|ups|led|lcd|usb|hdmi|vga|ssd|hdd|ram|cpu|gpu|cctv|dvr|nvr|wifi|voip|ip|id|ncr|car|barmm|dpwh|bir|lgu|deped|doh|dilg|dost|dict|lto|mtrcb|sec|sss|gsis|pnp|afp|bfp|bjmp|ched|tesda|neda|dbm|dof|dti|dole|denr|da|dar|dswd|dot|dotr|doe|psa|coa|csc|comelec|deo|rhu|i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii)$/i;
+        var minorWords = /^(a|an|the|and|but|or|for|nor|on|at|to|from|by|in|of|with)$/i;
+
+        return trimmed.toLowerCase().replace(/\b([a-z0-9']+)\b/g, function (word, _, offset, full) {
+            if (word === 'philgeps') return 'PhilGEPS';
+            if (keepUpper.test(word)) return word.toUpperCase();
+            var prevChar = offset > 0 ? full.charAt(offset - 1) : '';
+            var afterBoundary = offset === 0 || prevChar === '-' || prevChar === '(' || prevChar === '/' || prevChar === ':';
+            if (!afterBoundary && minorWords.test(word)) return word;
+            return word.charAt(0).toUpperCase() + word.slice(1);
+        });
+    }
+
+    // 1. Show Reset immediately when any filter has input or non-default selection
+    function hasActiveFilters() {
+        if (itemInput && itemInput.value.trim() !== '') return true;
+        if (agencyInput && agencyInput.value.trim() !== '') return true;
+        if (fcount && fcount.textContent.trim() !== '') return true;
+
+        for (var i = 0; i < selectIds.length; i++) {
+            var sel = document.getElementById(selectIds[i]);
+            if (sel && sel.selectedIndex > 0 && sel.value !== '') return true;
+        }
+
+        var defaultMin = minB ? (parseFloat(minB.min) || 1000) : 1000;
+        var defaultMax = maxB ? (parseFloat(maxB.max) || 10000000) : 10000000;
+        var curMin = minInput ? parseFloat(minInput.value) : (minB ? parseFloat(minB.value) : defaultMin);
+        var curMax = maxInput ? parseFloat(maxInput.value) : (maxB ? parseFloat(maxB.value) : defaultMax);
+
+        if (!isNaN(curMin) && curMin > defaultMin) return true;
+        if (!isNaN(curMax) && curMax < defaultMax) return true;
+
+        return false;
+    }
+
+    function syncReset() {
+        if (!clearBtn) return;
+        clearBtn.hidden = !hasActiveFilters();
+    }
+
+    [itemInput, agencyInput, minB, maxB, minInput, maxInput].forEach(function (el) {
+        if (!el) return;
+        el.addEventListener('input', syncReset);
+        el.addEventListener('change', syncReset);
+    });
+
+    selectIds.forEach(function (id) {
+        var sel = document.getElementById(id);
+        if (sel) sel.addEventListener('change', syncReset);
+    });
+
+    var clearSearchBtn = document.getElementById('clear-search');
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', function () { setTimeout(syncReset, 0); });
+    }
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () { setTimeout(syncReset, 0); });
+    }
+    if (fcount) {
+        new MutationObserver(syncReset).observe(fcount, {
+            childList: true,
+            characterData: true,
+            subtree: true
+        });
+    }
+    syncReset();
+
+    // 2. Compact styled autocomplete with Title Case (max 6 items; stays closed after selection)
+    function attachAutocomplete(inputId, listId, maxItems) {
+        var input = document.getElementById(inputId);
+        var datalist = document.getElementById(listId);
+        if (!input || !datalist) return;
+
+        var menu = document.createElement('ul');
+        menu.className = 'ac-menu';
+        menu.setAttribute('role', 'listbox');
+        menu.hidden = true;
+        input.parentNode.appendChild(menu);
+
+        var activeIdx = -1;
+        var currentMatches = [];
+        var lastSelectedValue = null;
+
+        function closeMenu() {
+            menu.hidden = true;
+            activeIdx = -1;
+        }
+
+        function selectValue(val) {
+            var formatted = toTitleCase(val);
+            lastSelectedValue = formatted;
+            input.value = formatted;
+            closeMenu();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function renderMenu() {
+            if (lastSelectedValue !== null && input.value === lastSelectedValue) {
+                closeMenu();
+                return;
+            }
+            lastSelectedValue = null;
+
+            var q = input.value.trim().toLowerCase();
+            var all = Array.prototype.map.call(datalist.options, function (opt) {
+                return opt.value;
+            }).filter(Boolean);
+
+            currentMatches = q
+                ? all.filter(function (v) { return v.toLowerCase().indexOf(q) !== -1; })
+                : all;
+
+            currentMatches = currentMatches.slice(0, maxItems);
+            menu.innerHTML = '';
+            activeIdx = -1;
+
+            if (!currentMatches.length) {
+                closeMenu();
+                return;
+            }
+
+            currentMatches.forEach(function (val, idx) {
+                var displayVal = toTitleCase(val);
+                var li = document.createElement('li');
+                li.className = 'ac-item';
+                li.setAttribute('role', 'option');
+                li.textContent = displayVal;
+                if (val.toLowerCase() === q || displayVal.toLowerCase() === q) {
+                    li.classList.add('selected');
+                }
+
+                li.addEventListener('mousedown', function (e) {
+                    e.preventDefault();
+                    selectValue(val);
+                });
+                li.addEventListener('mouseenter', function () {
+                    setActive(idx);
+                });
+                menu.appendChild(li);
+            });
+
+            menu.hidden = false;
+        }
+
+        function setActive(idx) {
+            var items = menu.querySelectorAll('.ac-item');
+            items.forEach(function (el, i) {
+                el.classList.toggle('active', i === idx);
+            });
+            activeIdx = idx;
+        }
+
+        input.addEventListener('focus', renderMenu);
+        input.addEventListener('input', renderMenu);
+        input.addEventListener('blur', function () {
+            setTimeout(closeMenu, 120);
+        });
+
+        input.addEventListener('keydown', function (e) {
+            if (menu.hidden) {
+                if (e.key === 'ArrowDown') renderMenu();
+                return;
+            }
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setActive((activeIdx + 1) % currentMatches.length);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setActive((activeIdx - 1 + currentMatches.length) % currentMatches.length);
+            } else if (e.key === 'Enter' && activeIdx >= 0) {
+                e.preventDefault();
+                selectValue(currentMatches[activeIdx]);
+            } else if (e.key === 'Escape') {
+                closeMenu();
+            }
+        });
+    }
+
+    attachAutocomplete('item', 'itemlist', 6);
+    attachAutocomplete('q', 'agencylist', 6);
+
+    // 3. Apply Title Case to <select> option labels (keeps underlying option.value intact)
+    function formatSelectOptions(sel) {
+        if (!sel) return;
+        Array.prototype.forEach.call(sel.options, function (opt) {
+            var formatted = toTitleCase(opt.textContent);
+            if (formatted && opt.textContent !== formatted) {
+                opt.textContent = formatted;
+            }
+        });
+    }
+
+    selectIds.forEach(function (id) {
+        var sel = document.getElementById(id);
+        if (!sel) return;
+        formatSelectOptions(sel);
+        new MutationObserver(function () {
+            formatSelectOptions(sel);
+        }).observe(sel, { childList: true, subtree: true });
+    });
+
+    // 4. Keep the violet slider fill synced on user drag and programmatic resets
+    var sliderWrap = minB && minB.closest('.range-slider');
+
+    function syncSliderFill() {
+        if (!minB || !maxB || !sliderWrap) return;
+        var min = parseFloat(minB.min) || 0;
+        var max = parseFloat(minB.max) || 100;
+        var v1 = Math.min(parseFloat(minB.value) || min, parseFloat(maxB.value) || max);
+        var v2 = Math.max(parseFloat(minB.value) || min, parseFloat(maxB.value) || max);
+        var p1 = ((v1 - min) / (max - min)) * 100;
+        var p2 = ((v2 - min) / (max - min)) * 100;
+        sliderWrap.style.setProperty('--min-pct', p1 + '%');
+        sliderWrap.style.setProperty('--max-pct', p2 + '%');
+    }
+
+    function watchInputValue(el) {
+        if (!el) return;
+        var desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        if (desc && desc.set && desc.get) {
+            Object.defineProperty(el, 'value', {
+                get: function () { return desc.get.call(this); },
+                set: function (val) {
+                    desc.set.call(this, val);
+                    syncSliderFill();
+                    syncReset();
+                }
+            });
+        }
+        el.addEventListener('input', syncSliderFill);
+        el.addEventListener('change', syncSliderFill);
+    }
+
+    if (minB && maxB) {
+        watchInputValue(minB);
+        watchInputValue(maxB);
+        [minInput, maxInput].forEach(function (el) {
+            if (el) {
+                el.addEventListener('input', function () { setTimeout(syncSliderFill, 0); });
+                el.addEventListener('change', function () { setTimeout(syncSliderFill, 0); });
+            }
+        });
+        syncSliderFill();
+    }
+})();
+</script>
 </body>
 </html>
