@@ -69,8 +69,11 @@ def contract_budget_expr(line_bids=None):
 @app.get("/api/filters")
 def filters():
     """Masterlists for the filter boxes, built from the loaded data."""
-    ents = query("""SELECT e.name, e.city, e.province, e.region FROM entities e
-                    JOIN addresses a ON a.id = e.address_id WHERE a.lat IS NOT NULL""")
+    ents = query("""SELECT DISTINCT e.name, e.city, e.province, e.region
+                    FROM entities e
+                    JOIN contracts c ON c.entity_id = e.id
+                    JOIN addresses a ON a.id = e.address_id
+                    WHERE a.lat IS NOT NULL""")
     regions, provinces, cities, agencies = {}, {}, {}, {}
     for r in ents:
         if r["region"]:
@@ -117,7 +120,7 @@ def pins(q: str | None = None, min_budget: float = 0, max_budget: float | None =
              GROUP_CONCAT(DISTINCT e.name ORDER BY e.name SEPARATOR '; ') AS entities
       FROM addresses a
       JOIN entities e ON e.address_id = a.id
-      LEFT JOIN contracts c ON c.entity_id = e.id
+      JOIN contracts c ON c.entity_id = e.id
       LEFT JOIN (SELECT bid_ref, award_no, SUM(item_budget) AS total
                  FROM items GROUP BY bid_ref, award_no) ib
              ON ib.bid_ref = c.bid_ref AND ib.award_no <=> c.award_no

@@ -504,6 +504,20 @@ def main():
         con.commit()
         print("removed %d stale contract(s) left by an earlier load" % len(stale))
 
+    # An agency/address can also disappear from the source. Remove entities
+    # with no contracts, then addresses with no entities, so old pins and
+    # filter options do not linger after a source edit.
+    cur.execute("""DELETE FROM entities WHERE NOT EXISTS
+                   (SELECT 1 FROM contracts WHERE contracts.entity_id = entities.id)""")
+    orphan_entities = cur.rowcount
+    cur.execute("""DELETE FROM addresses WHERE NOT EXISTS
+                   (SELECT 1 FROM entities WHERE entities.address_id = addresses.id)""")
+    orphan_addresses = cur.rowcount
+    con.commit()
+    if orphan_entities or orphan_addresses:
+        print("removed %d empty agency/agencies and %d unused address(es)"
+              % (orphan_entities, orphan_addresses))
+
     if items is not None:
         cur.execute("DELETE FROM items")          # items are rebuilt from the CSV each run
         ii = items.astype(object).where(items.notna(), None)
