@@ -1,0 +1,22 @@
+# Python environment and caches
+venv/
+.venv/
+__pycache__/
+05_app/__pycache__
+*.pyc
+.ipynb_checkpoints/
+
+# Secrets (never commit passwords)
+.env
+
+# Large raw PhilGEPS dumps are not needed to run the app.
+# Use `git add -f 01_prepare/philgeps2.csv` (or Git LFS) if you really need them.
+01_prepare/philgeps2.csv
+01_prepare/ncr_it_awarded2.csv
+
+*.log
+
+# Editor and system files
+.DS_Store
+.idea/
+.vscode/

@@ -3,194 +3,192 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Who Buys What? Government ICT Procurement Analytics & GIS</title>
-    
-    <!-- External CSS Libraries -->
+    <title>Who buys what? — PhilGEPS Procurement Map</title>
+
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem('procurement-theme');
+                if (!saved && matchMedia('(prefers-color-scheme: dark)').matches) saved = 'dark';
+                if (saved) document.documentElement.dataset.theme = saved;
+            } catch (e) {}
+        })();
+    </script>
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    
-    <!-- Custom Application CSS -->
-    <link rel="stylesheet" href="styles.css"> 
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <div class="dashboard">
-    
-    <!-- ========================================== -->
-    <!-- TOP HEADER                                 -->
-    <!-- ========================================== -->
+
+    <!-- ===================== HEADER ===================== -->
     <header class="top-header">
-        <div class="header-brand">
-            <h1 style="display: flex; align-items: center; gap: 8px; margin: 0;">
-                <!-- Shopping Cart SVG Icon -->
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #3b82f6;">
-                    <circle cx="8" cy="21" r="1"></circle>
-                    <circle cx="19" cy="21" r="1"></circle>
-                    <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"></path>
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18"></path>
+                    <path d="M3 12h12"></path>
+                    <path d="M3 18h8"></path>
+                    <circle cx="18" cy="17" r="3"></circle>
                 </svg>
-                Who buys what?
-            </h1>
-            <p>Government ICT Procurement Analytics & GIS</p>
+            </span>
+            <div class="brand-copy">
+                <h1>Who buys what?</h1>
+                <p>PhilGEPS ICT procurement map · nationwide</p>
+            </div>
         </div>
-        <div class="header-actions" style="display: inline-block;">
-            Data as of: <span id="last-updated" style="color: var(--accent);">Loading...</span> 
-            <!-- | <button class="btn ghost" style="padding: 6px 12px; margin-left: 10px;">Export Report</button> -->
+
+        <div class="header-right">
+            <div class="header-meta" title="Most recent data load">
+                <span class="live-dot" aria-hidden="true"></span>
+                <span>Data as of <strong id="last-updated">Loading…</strong></span>
+            </div>
+            <button type="button" id="themeToggle" class="icon-btn"
+                    aria-label="Switch to dark mode" aria-pressed="false"
+                    title="Switch to dark mode">☾</button>
         </div>
     </header>
 
     <div class="main-wrapper">
-        
-        <!-- ========================================== -->
-        <!-- LEFT SIDEBAR: FILTERS                      -->
-        <!-- ========================================== -->
-        <aside class="sidebar sidebar-left">
-            <div class="section-title">
-                Filters <span id="fcount" style="color: var(--accent);"></span>
-            </div>
 
-<!-- Item Search -->
-<div class="filter-group">
-    <label for="item">Search Item</label>
-
-    <div class="search-input-wrapper">
-        <input
-            id="item"
-            type="search"
-            list="itemlist"
-            placeholder="e.g. laptop, internet..."
-            autocomplete="on"
-        >
-
-        <button
-    type="button"
-    id="clear-search"
-    class="clear-search-btn"
-    title="Clear search"
-    aria-label="Clear search"
-    style="display: none;">
-    &times;
-</button>
-
-        <span class="search-icon">
-            <svg xmlns="http://www.w3.org/2000/svg"
-                 width="18" height="18"
-                 viewBox="0 0 24 24"
-                 fill="none"
-                 stroke="currentColor"
-                 stroke-width="2"
-                 stroke-linecap="round"
-                 stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-            </svg>
-        </span>
-
-        <datalist id="itemlist"></datalist>
-    </div>
-
-    <div class="hint">Separate alternatives with commas</div>
-</div>
-            
-            <!-- Price Range Filter -->
-            <div class="filter-group">
-                <label>Price Range (PHP)</label>
-
-                <div class="range-values">
-                    <span id="minLabel">₱1,000</span>
-                    <span id="maxLabel">₱10,000,000+</span>
+        <!-- ===================== LEFT: SEARCH / FILTERS ===================== -->
+        <aside class="sidebar sidebar-left" aria-label="Search and filters">
+            <div class="side-head">
+                <div>
+                    <span class="eyebrow">Find</span>
+                    <h2>Search &amp; filters</h2>
                 </div>
+                <span id="fcount" class="filter-count" aria-live="polite"></span>
+            </div>
 
-                <!-- Dual Range Sliders -->
-                <div class="range-slider">
-                    <input type="range" id="minb" min="1000" max="10000000" step="1000" value="1000">
-                    <input type="range" id="maxb" min="1000" max="10000000" step="1000" value="10000000">
+            <!-- Primary search -->
+            <div class="filter-group search-group">
+                <label for="item">Item or category</label>
+                <div class="search-input-wrapper">
+                    <input id="item" type="search" list="itemlist"
+                           placeholder="e.g. laptop, printer ink, Award 31637"
+                           autocomplete="on" aria-describedby="item-hint">
+                    <button type="button" id="clear-search" class="clear-search-btn"
+                            title="Clear search" aria-label="Clear search" hidden>&times;</button>
+                    <span class="search-icon" aria-hidden="true">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17"
+                             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                    </span>
+                    <datalist id="itemlist"></datalist>
                 </div>
+                <p class="hint" id="item-hint">Bid/Award numbers also work · commas = alternatives · quotes = exact phrase · plurals and small typos are handled</p>
+            </div>
 
-                <!-- Manual Number Inputs -->
-                <div class="range-inputs">
-                    <input type="number" id="minInput" min="1000" value="1000" autocomplete="off">
-                    <span>to</span>
-                    <input type="number" id="maxInput" min="1000" value="10000000" autocomplete="off">
+            <!-- Location -->
+            <details class="filter-section" open>
+                <summary>Location</summary>
+                <div class="filter-body">
+                    <select id="f-region" aria-label="Region"></select>
+                    <select id="f-province" aria-label="Province"></select>
+                    <select id="f-city" aria-label="City or municipality"></select>
                 </div>
-            </div>
+            </details>
 
-            <!-- Location Filter -->
-            <div class="filter-group">
-                <label>Location</label>
-                <select id="f-region" style="margin-bottom: 8px;"></select>
-                <select id="f-province" style="margin-bottom: 8px;"></select>
-                <select id="f-city"></select>
-            </div>
-
-            <!-- Agency Filter -->
-            <div class="filter-group">
-                <label>Agencies</label>
-                <input id="q" type="search" list="agencylist" placeholder="Type or pick from the list" autocomplete="off">
-                <datalist id="agencylist"></datalist>
-            </div>
-
-            <!-- Procurement Category/Status -->
-            <div class="filter-group">
-                <label>Procurement Data</label>
-                <select id="f-category" style="margin-bottom: 8px;"></select>
-                <select id="f-status"></select>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="btn-group">
-                <button class="btn" id="applyF" type="button">Apply Filters</button>
-                <button class="btn ghost" id="clearF" type="button">Clear</button>
-            </div>
-
-            <div class="fine">
-                Source: PhilGEPS notices. Prices are indicative and based on approved budgets, not amounts paid. Pins mark the agency's listed address.
-            </div>
-        </aside>
-
-        <!-- ========================================== -->
-        <!-- CENTER: MAP DISPLAY                        -->
-        <!-- ========================================== -->
-        <main class="map-container">
-            <!-- Overlay Toolbar -->
-            <div class="map-toolbar">
-                <div class="map-toolbar-top">
-                    <span>Showing procurement locations</span>
-                    <span>View by: Agency Location</span>
-                </div>
-                <div class="map-toolbar-bottom">
-                    <span class="map-label">Map Legend:</span>
-                    <div class="map-legend" style="font-size: 11px; display: flex; gap: 12px; align-items: center; background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 4px; width: fit-content; margin-bottom: 4px;">
-                        <span><b></b></span>
-                        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#3b82f6; border-radius:50%; display:inline-block;"></span> Agency Location</span>
-                        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#16a34a; border-radius:50%; display:inline-block;"></span> Lowest Price</span>
-                        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#dc2626; border-radius:50%; display:inline-block;"></span> Highest Price</span>
-                        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px; height:10px; background:#f59e0b; border-radius:50%; display:inline-block;"></span> Selected</span>
+            <!-- Budget -->
+            <details class="filter-section">
+                <summary>Budget range</summary>
+                <div class="filter-body">
+                    <div class="range-values">
+                        <span id="minLabel">₱1,000</span>
+                        <span id="maxLabel">₱10,000,000+</span>
+                    </div>
+                    <div class="range-slider">
+                        <input type="range" id="minb" min="1000" max="10000000" step="1000" value="1000" aria-label="Minimum budget">
+                        <input type="range" id="maxb" min="1000" max="10000000" step="1000" value="10000000" aria-label="Maximum budget">
+                    </div>
+                    <div class="range-inputs">
+                        <input type="number" id="minInput" min="1000" value="1000" autocomplete="off" aria-label="Minimum budget value">
+                        <span>to</span>
+                        <input type="number" id="maxInput" min="1000" value="10000000" autocomplete="off" aria-label="Maximum budget value">
                     </div>
                 </div>
+            </details>
+
+            <!-- Agency / record -->
+            <details class="filter-section" open>
+                <summary>Agency &amp; record</summary>
+                <div class="filter-body">
+                    <label for="q">Agency</label>
+                    <input id="q" type="search" list="agencylist"
+                           placeholder="Start typing an agency" autocomplete="off">
+                    <datalist id="agencylist"></datalist>
+
+                    <label for="f-category">Category</label>
+                    <select id="f-category"></select>
+
+                    <label for="f-status">Status</label>
+                    <select id="f-status"></select>
+                </div>
+            </details>
+
+            <div class="filter-actions">
+                <button class="btn ghost" id="clearF" type="button">Reset filters</button>
+                <!-- Kept for compatibility; filters apply automatically. -->
+                <button class="btn" id="applyF" type="button" hidden>Apply filters</button>
             </div>
 
-            <!-- Leaflet Target Div -->
-            <div id="map"></div>
+            <p class="fine">
+                Source: PhilGEPS notices. Values are labelled <strong>per item (est.)</strong> or <strong>whole lot</strong>;
+                these are budgets, not prices paid. Pins mark the agency’s listed address.
+            </p>
+        </aside>
 
-            <!-- Comparison Tray & Modal -->
+        <!-- ===================== CENTER: MAP ===================== -->
+        <main class="map-container">
+            <div class="map-toolbar">
+                <div class="mode-pill">
+                    <span class="pulse" aria-hidden="true"></span>
+                    <span id="mapMode">Agency locations</span>
+                </div>
+
+                <details class="legend-menu">
+                    <summary>Legend</summary>
+                    <div class="legend-card">
+                        <div class="legend-row"><span class="legend-dot legend-blue"></span> Agency location</div>
+                        <div class="legend-row"><span class="legend-dot legend-green"></span> Lowest budget/unit</div>
+                        <div class="legend-row"><span class="legend-dot legend-red"></span> Highest budget/unit</div>
+                        <div class="legend-row"><span class="legend-dot legend-amber"></span> Selected pin</div>
+                    </div>
+                </details>
+            </div>
+
+            <div id="map"></div>
             <div id="tray"></div>
             <section id="cmp" aria-label="Comparison" hidden></section>
+            <section id="contractDrawer" aria-label="Agency contracts" hidden></section>
         </main>
 
-        <!-- ========================================== -->
-        <!-- RIGHT SIDEBAR: ANALYTICS & RESULTS         -->
-        <!-- ========================================== -->
-        <aside class="sidebar sidebar-right">
-            <div class="section-title">Analytics Summary</div>
-            <div id="status" role="status" aria-live="polite">Loading locations...</div>
+        <!-- ===================== RIGHT: RESULTS ===================== -->
+        <aside class="sidebar sidebar-right" aria-label="Results">
+            <div class="side-head">
+                <div>
+                    <span class="eyebrow">Explore</span>
+                    <h2>Locations</h2>
+                </div>
+                <span class="side-tip">Click a pin or card to inspect</span>
+            </div>
+
+            <div id="status" role="status" aria-live="polite">Loading locations…</div>
+            <section id="summary" aria-label="Price extremes" hidden></section>
             <ol id="list"></ol>
         </aside>
 
     </div>
 </div>
 
-<!-- Scripts -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="script.js"></script> <!-- Linked Custom JavaScript -->
-
+<script src="script.js"></script>
 </body>
 </html>

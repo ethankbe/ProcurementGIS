@@ -18,7 +18,220 @@ const peso = n => {
 
 const num = n => n == null ? "n/a" : Number(n).toLocaleString("en-PH", {maximumFractionDigits: 2});
 
+const formatDate = dateStr => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    return isNaN(d) ? dateStr : d.toLocaleDateString("en-US", {month: "short", day: "numeric", year: "numeric"});
+};
+
+// Blank award notices are loaded with an internal key like 50720:NO-AWARD-NO-1.
+// Those rows are still awarded; they simply have no notice number to link to.
+const isUnnumberedAward = id =>
+    typeof id === "string" && id.includes(":NO-AWARD-NO-");
+
+const bidRefBadge = (ref, title = "Bid Reference Number") =>
+    `<span class="ref ref-bid" title="${esc(title)}">Bid ${esc(ref ?? "—")}</span>`;
+
+const refBadge = (ref, awardId) => {
+    if (!awardId || isUnnumberedAward(awardId)) {
+        return bidRefBadge(ref, isUnnumberedAward(awardId)
+            ? "Award notice number not in source; showing the bid reference number"
+            : "Bid Reference Number");
+    }
+    return bidRefBadge(ref) +
+        `<a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(awardId)}" ` +
+        `target="_blank" rel="noopener noreferrer" class="ref-link" ` +
+        `title="Open award notice ${esc(awardId)}">` +
+        `<span class="ref ref-award">Award ${esc(awardId)} ↗</span></a>`;
+};
+
+const supplierLine = awardee => awardee
+    ? `<div class="cmp-supplier"><strong>Supplier:</strong> ${esc(awardee)}</div>`
+    : "";
+
+const itemSubLabel = l => l.item_secondary ??
+    (l.item_name && l.item_name !== l.item ? l.item_name : null);
+
+const lotRange = p => {
+    if (!p.n_lots || p.lot_min == null) return "n/a";
+    return p.lot_min === p.lot_max
+        ? peso(p.lot_min)
+        : `${peso(p.lot_min)} – ${peso(p.lot_max)}`;
+};
+
+const sumRef = e => {
+    const bid = `Bid ${esc(e.bid_ref || "—")}`;
+    return !e.award_id || isUnnumberedAward(e.award_id)
+        ? bid
+        : `${bid} · Award ${esc(e.award_id)}`;
+};
+
+const sumWhere = e => [e.region || "Unspecified region", e.entity]
+    .filter(Boolean).map(esc).join(" · ");
+
+const sumCard = (e, kind, label, compact = false, priceKey = "unit_budget") => {
+    if (!e) return "";
+    const sub = itemSubLabel(e);
+    const titleBits = [e.item, sub, e.entity, e.address, e.region, e.awardee]
+        .filter(Boolean).join(" · ");
+    return `<button type="button" class="sum-card ${kind}${compact ? " compact" : ""}" ` +
+           `${e.address_id != null ? `data-id="${esc(e.address_id)}"` : ""} ` +
+           `title="Focus on the map — ${esc(titleBits)}">` +
+           `<span class="sum-label">${esc(label)}</span>` +
+           `<strong class="sum-price">${peso(e[priceKey])}</strong>` +
+           `<span class="sum-item">${esc(e.item || "Item")}</span>` +
+           (sub ? `<span class="sum-sub">${esc(sub)}</span>` : "") +
+           `<span class="sum-meta">${sumWhere(e)}</span>` +
+           `<span class="sum-ref">${sumRef(e)} · ${num(e.quantity)} ${esc(e.uom || "")}</span>` +
+           `</button>`;
+};
+
+function renderSummary(summary) {
+    const el = $("summary");
+    if (!el) return;
+
+    // Older cached API responses used a flat shape; keep them readable too.
+    const flat = summary && summary.national
+        ? {per_item: {available: summary.available || 0, national: summary.national,
+                      regions: summary.regions || []},
+           whole_lot: {available: 0, national: null, regions: []}}
+        : null;
+    const data = flat || {
+        per_item: (summary && summary.per_item) || {available: 0, national: null, regions: []},
+        whole_lot: (summary && summary.whole_lot) || {available: 0, national: null, regions: []},
+    };
+
+    const groups = [
+        {key: "per_item", title: "National per item", regionTitle: "Per item by region",
+         low: "Least per item", high: "Most per item", median: "Median per item",
+         field: "unit_budget", open: true},
+        {key: "whole_lot", title: "National whole lots", regionTitle: "Whole lots by region",
+         low: "Smallest lot", high: "Largest lot", median: "Median lot",
+         field: "item_budget", open: false},
+    ];
+
+    if (!groups.some(g => data[g.key].available)) {
+        el.hidden = false;
+        el.innerHTML = `<div class="sum-head">` +
+            `<span class="status-kicker">Price extremes</span>` +
+            `<span class="sum-count">Nothing to rank</span></div>` +
+            `<p class="sum-empty">No budget values in this search can be ranked as prices.</p>`;
+        return;
+    }
+
+    const nationalBlock = (g, d) => !d.national ? "" :
+        `<details class="sum-block" ${g.open ? "open" : ""}>` +
+          `<summary><span class="sum-caret" aria-hidden="true">${g.open ? "▾" : "▸"}</span>` +
+            `<span class="sum-block-title">${esc(g.title)}</span>` +
+            `<span class="sum-badge">all regions</span></summary>` +
+          `<div class="sum-body">` +
+            sumCard(d.national.lowest, "low", g.low, false, g.field) +
+            sumCard(d.national.highest, "high", g.high, false, g.field) +
+            (d.national.median != null
+                ? `<div class="sum-median">${esc(g.median)} <strong>${peso(d.national.median)}</strong></div>`
+                : "") +
+          `</div>` +
+        `</details>`;
+
+    const regionBlock = (g, d) => !(d.regions || []).length ? "" :
+        `<details class="sum-block">` +
+          `<summary><span class="sum-caret" aria-hidden="true">▸</span>` +
+            `<span class="sum-block-title">${esc(g.regionTitle)}</span>` +
+            `<span class="sum-badge">${d.regions.length} region${d.regions.length === 1 ? "" : "s"}</span></summary>` +
+          `<div class="sum-body">` +
+            d.regions.map(rg => `<div class="sum-region">` +
+              `<div class="sum-region-head"><b>${esc(rg.region)}</b>` +
+                `<span title="${esc(g.median)}">${num(rg.count)} · ${peso(rg.median)}</span></div>` +
+              sumCard(rg.lowest, "low", "Least", true, g.field) +
+              sumCard(rg.highest, "high", "Most", true, g.field) +
+              `</div>`).join("") +
+          `</div>` +
+        `</details>`;
+
+    const nItems = data.per_item.available || 0;
+    const nLots = data.whole_lot.available || 0;
+    const countText = nItems && nLots
+        ? `${num(nItems)} per-item · ${num(nLots)} lot`
+        : nItems ? `${num(nItems)} comparable lines` : `${num(nLots)} whole-lot lines`;
+
+    el.hidden = false;
+    el.innerHTML =
+        `<div class="sum-head"><span class="status-kicker">Price extremes</span>` +
+        `<span class="sum-count">${countText}</span></div>` +
+        groups.map(g => nationalBlock(g, data[g.key]) + regionBlock(g, data[g.key])).join("") +
+        `<div class="sum-note">Per-item estimates and whole-lot budgets are ranked separately; ` +
+        `whole-lot values are not unit prices.</div>`;
+}
+
+function clearSummary() {
+    const el = $("summary");
+    if (el) { el.hidden = true; el.innerHTML = ""; }
+}
+
+const itemPriceRows = p => {
+    if (!p.n_comparable) {
+        return `<dt>Whole lot budget</dt><dd>${lotRange(p)}</dd>`;
+    }
+    const units = p.min_unit === p.max_unit
+        ? `<dt>Budget/item (est.)</dt><dd>${peso(p.min_unit)}</dd>`
+        : `<dt>Budget/item (est.)</dt><dd>${peso(p.min_unit)} to ${peso(p.max_unit)}</dd>` +
+          `<dt>Median (est.)</dt><dd>${peso(p.median_unit)}</dd>`;
+    return units + (p.n_lots ? `<dt>Lot totals</dt><dd>${lotRange(p)}</dd>` : "");
+};
+
+const itemPriceLines = p => {
+    let out = "";
+    if (p.n_comparable) {
+        const range = p.min_unit === p.max_unit
+            ? peso(p.min_unit)
+            : `${peso(p.min_unit)} – ${peso(p.max_unit)}`;
+        const median = p.min_unit !== p.max_unit && p.median_unit != null
+            ? ` · median ${peso(p.median_unit)}`
+            : "";
+        out += `<span class="meta meta-price"><span class="meta-label">Budget/item (est.)</span> ${range}${median}</span>`;
+    }
+    if (p.n_lots) {
+        out += `<span class="meta meta-price"><span class="meta-label">Total lot budget</span> ${lotRange(p)}</span>`;
+    }
+    return out;
+};
+
+const priceTag = (kind, text) => `<span class="price-tag tag-${kind}">${text}</span>`;
+
+const linePrice = l => l.comparable
+    ? peso(l.unit_budget) + priceTag("unit", "per item est.")
+    : (l.item_budget != null
+        ? peso(l.item_budget) + priceTag("lot", "whole lot")
+        : "n/a" + priceTag("lot", "no price"));
+
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+
+// --- Theme toggle ---
+const themeBtn = $("themeToggle");
+const THEME_ICONS = {
+    dark: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"></path></svg>`,
+    light: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.9 4.9 1.4 1.4"></path><path d="m17.7 17.7 1.4 1.4"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m4.9 19.1 1.4-1.4"></path><path d="m17.7 6.3 1.4-1.4"></path></svg>`
+};
+
+function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    if (!themeBtn) return;
+    themeBtn.innerHTML = THEME_ICONS[theme];
+    themeBtn.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+    themeBtn.setAttribute("aria-label", themeBtn.title);
+    themeBtn.setAttribute("aria-pressed", String(theme === "dark"));
+}
+
+applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+
+if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+        const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        applyTheme(next);
+        try { localStorage.setItem("procurement-theme", next); } catch (e) {}
+    });
+}
 
 
 // --- Map Initialization & Styling ---
@@ -128,25 +341,142 @@ function focusLoc(id) {
     m.openPopup();
 }
 
-const refLine = (ref, right, text, awardId = null, awardee = null) => {
-    const awardeeHtml = awardee ? `<div style="font-size: 11px; color: var(--muted, #64748b); margin-top: 4px; padding-left: 4px;"><strong>Supplier:</strong> ${esc(awardee)}</div>` : "";
+const refLine = (ref, right, text, awardId = null, awardee = null) =>
+    `<li><div class="top">${refBadge(ref, awardId)}` +
+    `<span class="amt">${right}</span></div><div class="t">${text}</div>` +
+    supplierLine(awardee) + `</li>`;
 
-    // Conditional rendering for the badge
-    const badgeHtml = awardId 
-        ? `<a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(awardId)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="Click to view full details">
-             <span class="ref">${esc(awardId)} ↗</span>
-           </a>`
-        : `<span class="ref" style="cursor: help;" title="Bid Reference Number">${esc(ref)}</span>`;
+// --- Full contract details in a side drawer ---
 
-    return `<li><div class="top">` +
-    badgeHtml +
-    `<span class="amt">${right}</span></div><div class="t">${text}</div>${awardeeHtml}</li>`;
+const contractDrawerCache = {};
+
+const contractItemTable = c => {
+    const items = c.items || [];
+    if (!items.length) return `<p class="cmp-empty">No item lines recorded for this contract.</p>`;
+    return `<div class="cmp-table-wrap contract-table-wrap"><table>
+             <thead><tr><th>Item Details</th><th>Qty</th><th>Indicative budget</th></tr></thead>
+             <tbody>` +
+           items.map(l => `
+             <tr>
+               <td>
+                 <div class="cmp-item-title">${esc(l.item || l.item_name || c.title || "Item line")}</div>
+                 ${itemSubLabel(l) ? `<div class="cmp-line-meta">${esc(itemSubLabel(l))}</div>` : ""}
+               </td>
+               <td class="num">${num(l.quantity)} ${esc(l.uom || "")}</td>
+               <td class="num price-cell">${linePrice(l)}</td>
+             </tr>`).join("") +
+           `</tbody></table></div>`;
 };
 
+const contractCard = c => {
+    const derived = c.derived
+        ? `<small class="derived-note" title="Budget comes from the item lines, not a copied whole-lot ABC">from items</small>`
+        : "";
+    const meta = [c.status, formatDate(c.published)].filter(Boolean).map(esc).join(" · ");
+    return `<article class="drawer-contract">
+              <div class="dc-head">
+                <div>${refBadge(c.bid_ref, c.award_id)}</div>
+                <div class="dc-budget">${peso(c.abc)}${derived}</div>
+              </div>
+              <h4 class="dc-title">${esc(c.title || c.bid_ref)}</h4>
+              <div class="dc-meta">${supplierLine(c.awardee)}${meta ? `<div class="detail-meta">${meta}</div>` : ""}</div>
+              ${contractItemTable(c)}
+            </article>`;
+};
+
+const contractYearCards = rows => {
+    const byYear = new Map();
+    rows.forEach(x => {
+        const d = x.published ? new Date(x.published) : null;
+        const year = d && !isNaN(d) ? d.getFullYear() : "Undated";
+        if (!byYear.has(year)) byYear.set(year, []);
+        byYear.get(year).push(x);
+    });
+    return [...byYear.entries()]
+        .sort((a, b) => a[0] === "Undated" ? 1
+            : b[0] === "Undated" ? -1
+            : Number(b[0]) - Number(a[0]))
+        .map(([year, items]) =>
+            `<details class="contract-year" open><summary>${esc(year)} <span>${items.length}</span></summary>` +
+            `<div class="contract-year-body">${items.map(contractCard).join("")}</div></details>`
+        ).join("");
+};
+
+const fetchAllContracts = async id => {
+    const all = [];
+    for (let offset = 0; offset < 20000; offset += 200) {
+        const res = await fetch(`/api/pins/${id}/contracts?limit=200&offset=${offset}&details=1&${filterParams(false)}`);
+        if (!res.ok) throw new Error("bad response");
+        const rows = await res.json();
+        all.push(...rows);
+        if (rows.length < 200) break;
+    }
+    return all;
+};
+
+const contractDrawerKey = id => `${id}:${filterParams(false).toString()}`;
+
+const closeContractDrawer = () => {
+    const d = $("contractDrawer");
+    if (!d) return;
+    d.hidden = true;
+    d.dataset.token = "";
+};
+
+const bindContractClose = () => {
+    const btn = $("closeContractDrawer");
+    if (btn) btn.onclick = closeContractDrawer;
+};
+
+const contractDrawerShell = p => `
+    <div class="cmp-header">
+        <div class="cmp-header-main">
+            <h2>All contracts</h2>
+            <p class="cmp-subtitle">${esc(p.entities || "Agency")} · ${esc(p.address || "No address listed")}</p>
+        </div>
+        <button type="button" class="btn ghost close-cmp" id="closeContractDrawer">Close</button>
+    </div>`;
+
+const openContractDrawer = async p => {
+    const d = $("contractDrawer");
+    if (!d) return;
+    const id = Number(p.id);
+    const key = contractDrawerKey(id);
+    const token = `${key}:${Date.now()}`;
+    d.dataset.token = token;
+    $("cmp").hidden = true;
+    d.hidden = false;
+    d.innerHTML = contractDrawerShell(p) +
+        `<div class="drawer-loading">Loading every contract and its item lines…</div>`;
+    bindContractClose();
+    $("closeContractDrawer")?.focus();
+
+    try {
+        let rows = contractDrawerCache[key];
+        if (!rows) {
+            rows = await fetchAllContracts(id);
+            contractDrawerCache[key] = rows;
+        }
+        if (d.dataset.token !== token) return;
+        d.innerHTML = contractDrawerShell(p) + (rows.length
+            ? `<div class="drawer-summary">${rows.length} contract${rows.length === 1 ? "" : "s"} · grouped by year</div>` +
+              contractYearCards(rows) +
+              `<p class="cmp-note"><span class="legend-key tag-unit">PER ITEM (EST.)</span> uses genuine line budgets. ` +
+              `<span class="legend-key tag-lot">WHOLE LOT</span> is the full bundle budget. These are budgets, not amounts paid.</p>`
+            : `<p class="cmp-empty">No contracts found.</p>`);
+        bindContractClose();
+    } catch {
+        if (d.dataset.token !== token) return;
+        d.innerHTML = contractDrawerShell(p) +
+            `<p class="cmp-empty">Could not load contracts. Please try again.</p>`;
+        bindContractClose();
+    }
+};
 
 // --- Data Fetching (Agencies & Items) ---
 async function loadAgencies() {
     const params = filterParams(false);
+    clearSummary();
     
     const res = await fetch("/api/pins?" + params);
     if (!res.ok) throw new Error("bad response");
@@ -156,22 +486,26 @@ async function loadAgencies() {
         p => `<div class="pop"><h2>${esc(p.entities)}</h2><div class="addr">${esc(p.address)}</div>` +
              `<dl><dt>Contracts</dt><dd>${p.contracts}</dd>` +
              `<dt>Total budget</dt><dd>${peso(p.total_budget)}</dd></dl>` +
-             `<ul class="refs" id="refs-${p.id}"><li class="more">Loading contracts...</li></ul></div>`,
+             `<div class="pop-section-title">Recent contracts</div>` +
+             `<ul class="refs" id="refs-${p.id}"><li class="more">Loading contracts...</li></ul>` +
+             `<button type="button" class="btn pop-btn contract-details-btn" id="all-${p.id}" data-id="${p.id}">` +
+             `<span>View all ${p.contracts} contracts</span><span aria-hidden="true">→</span></button></div>`,
 async (p, marker) => {
+    const popupEl = marker.getPopup()?.getElement();
+    if (!popupEl) return;
+
+    const viewAll = popupEl.querySelector(`#all-${p.id}`);
+    if (viewAll && !viewAll.dataset.bound) {
+        viewAll.dataset.bound = "1";
+        viewAll.onclick = () => openContractDrawer(p);
+    }
+
     try {
         const r = await fetch(
             `/api/pins/${p.id}/contracts?limit=10&${filterParams(false)}`
         );
-
-        if (!r.ok) {
-            throw new Error(`HTTP ${r.status}`);
-        }
-
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const rows = await r.json();
-
-        // Get the currently open popup belonging to this marker
-        const popupEl = marker.getPopup()?.getElement();
-        if (!popupEl) return;
 
         const el = popupEl.querySelector(`#refs-${p.id}`);
         if (!el) return;
@@ -197,14 +531,8 @@ async (p, marker) => {
 
     } catch (error) {
         console.error("Could not load contracts for agency:", p.id, error);
-
-        const popupEl = marker.getPopup()?.getElement();
-        const el = popupEl?.querySelector(`#refs-${p.id}`);
-
-        if (el) {
-            el.innerHTML =
-                `<li class="more">Could not load contracts. Please try again.</li>`;
-        }
+        const el = popupEl.querySelector(`#refs-${p.id}`);
+        if (el) el.innerHTML = `<li class="more">Could not load contracts. Please try again.</li>`;
     }
 },
 
@@ -215,8 +543,9 @@ async (p, marker) => {
     );
     
     const n = data.features.length;
-    $("status").innerHTML = n ? `<b>Overall Summary</b><br><span style="color:#64748b; font-size:12px">${n} location${n === 1 ? "" : "s"} found</span>`
-        : "No agencies match. Clear a filter or adjust criteria.";
+    $("status").innerHTML = n
+        ? `<span class="status-kicker">Agency locations</span><strong>${n} location${n === 1 ? "" : "s"} found</strong><span class="status-sub">Click a pin to see its contracts.</span>`
+        : `<span class="status-kicker">Agency locations</span><strong>No matches</strong><span class="status-sub">Clear a filter or adjust the criteria.</span>`;
 }
 
 async function loadItems(itemQ) {
@@ -228,22 +557,29 @@ async function loadItems(itemQ) {
     const res = await fetch(
         `/api/items/pins?q=${encodeURIComponent(itemQ)}&${params.toString()}`
     );
-    if (!res.ok) { $("status").textContent = "Type at least 2 characters to search items."; return; }
+    if (!res.ok) {
+        clearSummary();
+        $("status").textContent = "Type at least 2 characters to search items.";
+        return;
+    }
     const data = await res.json();
+    renderSummary(data.summary);
     
     render(data,
         p => `<div class="pop"><h2>${esc(p.entities)}</h2><div class="addr">${esc(p.address)}</div>` +
              `<dl><dt>Matching items</dt><dd>${p.n_items}${p.total_qty ? ` (${num(p.total_qty)} units)` : ""}</dd>` +
-             (p.n_comparable 
-             ? (p.min_unit === p.max_unit 
-                 ? `<dt>Per unit</dt><dd>${peso(p.min_unit)}</dd>`
-                 : `<dt>Per unit</dt><dd>${peso(p.min_unit)} to ${peso(p.max_unit)}</dd><dt>Median</dt><dd>${peso(p.median_unit)}</dd>`)
-             : `<dt>Per unit</dt><dd>Not Available</dd>`) + `</dl>` +
+             itemPriceRows(p) + `</dl>` +
+             `<div class="pop-note">${p.n_comparable ? "Per-item estimates use real line budgets. " : ""}Whole-lot values cover the full bundle, not one item.</div>` +
              `<ul class="refs" id="refs-${p.id}"><li class="more">Loading items...</li></ul>` +
-             `<button class="btn" id="cmp-${p.id}" style="width:100%; margin-top:10px;">Add to comparison</button></div>`,
+             `<button type="button" class="btn pop-btn contract-details-btn" id="all-${p.id}" data-id="${p.id}">` +
+             `<span>View all agency contracts</span><span aria-hidden="true">→</span></button>` +
+             `<button class="btn pop-btn cmpbtn" id="cmp-${p.id}" data-id="${p.id}">` +
+             `<span class="cmp-icon">+</span><span>Add to comparison</span></button></div>`,
         async p => {
             const b = $(`cmp-${p.id}`);
             if (b) b.onclick = () => addCompare(p);
+            const viewAll = $(`all-${p.id}`);
+            if (viewAll) viewAll.onclick = () => openContractDrawer(p);
             const el = $(`refs-${p.id}`);
             try {
                 const r = await fetch(`/api/items/compare?q=${encodeURIComponent(itemQ)}&a=${p.id}&b=0&${filterParams(true)}`);
@@ -251,35 +587,61 @@ async function loadItems(itemQ) {
                 const lines = d ? d.a.lines : [];
                 el.innerHTML = lines.length
                     ? lines.slice(0, 10).map(l => // Add l.awardee at the very end
-refLine(l.bid_ref, l.comparable ? peso(l.unit_budget) + " each" : (l.item_budget != null ? peso(l.item_budget) + " total" : "n/a"), `${esc(l.item)}, ${num(l.quantity)} ${esc(l.uom || "")}`, l.award_id, l.awardee
+refLine(l.bid_ref, linePrice(l),
+                        `${esc(l.item)}${itemSubLabel(l) ? ` · ${esc(itemSubLabel(l))}` : ""}, ${num(l.quantity)} ${esc(l.uom || "")}`,
+                        l.award_id, l.awardee
                       )).join("") + 
                       (lines.length > 10 ? `<li class="more">Showing 10 of ${lines.length} items</li>` : "")
                     : `<li class="more">No items to show.</li>`;
             } catch { el.innerHTML = `<li class="more">Could not load items.</li>`; }
         },
-        p => `<li><button class="row" data-id="${p.id}"><span class="name">${esc(p.entities)}</span>` +
+        p => `<li draggable="true" data-id="${p.id}"><span class="drag-handle" title="Drag to a compare slot" aria-hidden="true">⠿</span>` +
+             `<button class="row" data-id="${p.id}"><span class="name">${esc(p.entities)}</span>` +
              `<span class="addr">${esc(p.address)}</span>` +
-             `<span class="meta"><b>${p.n_items}</b> item${p.n_items === 1 ? "" : "s"}, ` +
-             (p.n_comparable ? `median ${peso(p.median_unit)} per unit` : "no per-unit price") + `</span></button>` +
-             `<button class="cmpbtn" data-id="${p.id}">Compare Location</button></li>`,
-        (a, b) => (a.median_unit ?? Infinity) - (b.median_unit ?? Infinity)
+             `<span class="meta"><b>${p.n_items}</b> item${p.n_items === 1 ? "" : "s"}</span>` +
+             itemPriceLines(p) + `</button>` +
+             `<button class="cmpbtn" data-id="${p.id}" title="Add to comparison">` +
+             `<span class="cmp-icon">+</span><span>Compare</span></button></li>`,
+        (a, b) => {
+            const ka = a.n_comparable ? a.median_unit : Infinity;
+            const kb = b.n_comparable ? b.median_unit : Infinity;
+            return ka === kb
+                ? (a.lot_min ?? Infinity) - (b.lot_min ?? Infinity)
+                : ka - kb;
+        }
     );
     
     const n = data.features.length;
     $("status").innerHTML = n
-        ? `<b>Results for "${itemQ}"</b><br><span style="color:#64748b; font-size:12px">${n} location${n === 1 ? "" : "s"} found</span>` +
-          (data.truncated ? "<br><small style='color:var(--hot)'>Results capped; try being more specific.</small>" : "")
-        : `No purchases found for "${itemQ}".`;
+        ? `<span class="status-kicker">Item matches</span><strong>${n} location${n === 1 ? "" : "s"} for “${esc(itemQ)}”</strong>` +
+          `<span class="status-sub">Click a pin to inspect items. Select two to compare.</span>` +
+          (data.truncated ? `<span class="status-warn">Results capped — try a more specific search.</span>` : "")
+        : `<span class="status-kicker">Item matches</span><strong>No purchases found</strong><span class="status-sub">Try a broader term such as “laptop” or “printer”.</span>`;
 }
 
 async function refresh() {
     const itemQ = $("item").value.trim();
     const mode = itemQ ? "item:" + itemQ : "agency";
-    if (mode !== lastMode) { fitNext = true; lastMode = mode; }
+    if (mode !== lastMode) {
+        fitNext = true;
+        lastMode = mode;
+        selected = []; // a new search starts a fresh comparison
+    }
+
+    const mapMode = $("mapMode");
+    if (mapMode) {
+        mapMode.textContent = itemQ
+            ? "Item search: " + (itemQ.length > 32 ? itemQ.slice(0, 32) + "…" : itemQ)
+            : "Agency locations";
+    }
+
     try { 
         await (itemQ ? loadItems(itemQ) : loadAgencies()); 
+        drawTray();
     } catch { 
+        clearSummary();
         $("status").textContent = "Could not reach the server. Check that it is running."; 
+        drawTray();
     }
 }
 
@@ -351,27 +713,42 @@ function countFilters() {
 
 // Event Listeners for Filters
 Object.values(SEL).forEach(id => $(id).addEventListener("change", () => { fillFilters(); countFilters(); later(); }));
-["q"].forEach(id => $(id).addEventListener("input", countFilters));
+["q"].forEach(id => $(id).addEventListener("input", () => { countFilters(); later(); }));
 $("clearF").onclick = () => {
     Object.values(SEL).forEach(id => { $(id).value = ""; });
-    $("q").value = ""; 
-    // Reset Price range
+    $("q").value = "";
+    $("item").value = "";
+    syncClearSearch();
+
+    // Reset price range
     $("minInput").value = "1000"; $("maxInput").value = "10000000";
     $("minb").value = "1000"; $("maxb").value = "10000000";
     updatePriceRange("min");
 
-    // reset the search item
-    // $("item").value ="";
-    
     if (FILTERS) fillFilters();
-    countFilters(); 
+    countFilters();
     later();
 };
 if($("applyF")) $("applyF").addEventListener("click", refresh);
 
 // Typeahead for Items
 let sugTimer = null;
+
+function syncClearSearch() {
+    const btn = $("clear-search");
+    if (btn) btn.hidden = !$("item").value;
+}
+syncClearSearch();
+
+$("clear-search").addEventListener("click", () => {
+    $("item").value = "";
+    syncClearSearch();
+    later();
+    $("item").focus();
+});
+
 $("item").addEventListener("input", () => {
+    syncClearSearch();
     clearTimeout(sugTimer);
     later(); // Also trigger standard refresh
     const v = $("item").value.trim();
@@ -384,11 +761,60 @@ $("item").addEventListener("input", () => {
     }, 200);
 });
 
+$("summary").addEventListener("click", e => {
+    const card = e.target.closest(".sum-card[data-id]");
+    if (card) focusLoc(+card.dataset.id);
+});
+
 $("list").addEventListener("click", e => {
     const c = e.target.closest(".cmpbtn");
     if (c) return addCompare(props[c.dataset.id]);
     const r = e.target.closest(".row");
     if (r) focusLoc(+r.dataset.id);
+});
+
+
+// --- Drag a result card into the comparison dock ---
+const DRAG_TYPE = "application/x-procurement-location";
+
+const readDragId = e => {
+    const dt = e.dataTransfer;
+    if (!dt) return null;
+    const raw = dt.getData(DRAG_TYPE) || dt.getData("text/plain");
+    return raw ? Number(raw) : null;
+};
+
+$("list").addEventListener("dragstart", e => {
+    const li = e.target.closest("li[data-id]");
+    if (!li) return;
+    e.dataTransfer.effectAllowed = "copy";
+    e.dataTransfer.setData("text/plain", li.dataset.id);
+    e.dataTransfer.setData(DRAG_TYPE, li.dataset.id);
+    li.classList.add("dragging");
+});
+
+$("list").addEventListener("dragend", e => {
+    const li = e.target.closest("li[data-id]");
+    if (li) li.classList.remove("dragging");
+    trayEl.classList.remove("drag-over");
+    document.querySelectorAll(".tray-slot").forEach(s => s.classList.remove("drop-target"));
+});
+
+const trayEl = $("tray");
+trayEl.addEventListener("dragover", e => {
+    if (e.target.closest(".tray-slot")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    trayEl.classList.add("drag-over");
+});
+
+trayEl.addEventListener("drop", e => {
+    if (e.target.closest(".tray-slot")) return;
+    e.preventDefault();
+    trayEl.classList.remove("drag-over");
+    const id = readDragId(e);
+    if (id == null || !props[id]) return;
+    setCompareSlot(selected.length < 2 ? selected.length : 1, props[id]);
 });
 
 
@@ -402,29 +828,76 @@ function addCompare(p) {
 }
 
 function markCompare() {
-    document.querySelectorAll(".cmpbtn").forEach(b => {
+    document.querySelectorAll(".cmpbtn[data-id]").forEach(b => {
         const on = selected.some(s => String(s.id) === b.dataset.id);
-        b.classList.toggle("on", on); b.textContent = on ? "Selected" : "Compare Location";
+        const idle = b.classList.contains("pop-btn") ? "Add to comparison" : "Compare";
+        b.classList.toggle("on", on);
+        b.innerHTML = `<span class="cmp-icon">${on ? "✓" : "+"}</span><span>${on ? "Added" : idle}</span>`;
+        b.title = on ? "Remove from comparison" : "Add to comparison";
     });
+}
+
+const topLocation = (exclude = []) =>
+    Object.values(props).find(p => !exclude.includes(p.id)) || null;
+
+function setCompareSlot(index, p) {
+    if (!p || selected.some(s => s.id === p.id)) return;
+    const next = selected.slice(0, index);
+    while (next.length < index) {
+        const filler = topLocation(next.map(s => s.id).concat(p.id));
+        if (!filler) return;
+        next.push({id: filler.id, entities: filler.entities});
+    }
+    next[index] = {id: p.id, entities: p.entities};
+    selected = next.slice(0, 2);
+    drawTray(); markCompare();
 }
 
 function drawTray() {
     const t = $("tray");
-    t.style.display = selected.length ? "flex" : "none";
-    if (!selected.length) return;
-    
-    const text = selected.length === 2 
-        ? `<span class="tray-agency" title="${esc(selected[0].entities)}"><b>${esc(selected[0].entities)}</b></span> <span class="vs">vs</span> <span class="tray-agency" title="${esc(selected[1].entities)}"><b>${esc(selected[1].entities)}</b></span>`
-        : `<span class="tray-agency" title="${esc(selected[0].entities)}"><b>${esc(selected[0].entities)}</b></span> <span class="vs">...</span> <span style="color:#94a3b8; white-space:nowrap;">pick one more</span>`;
+    if (!$("item").value.trim()) {
+        t.style.display = "none";
+        t.innerHTML = "";
+        return;
+    }
+    t.style.display = "block";
 
-    const fullTitle = selected.map(s => s.entities).join(" vs ");
+    const slot = i => {
+        const s = selected[i];
+        return `<button type="button" class="tray-slot ${s ? "filled" : ""}" data-slot="${i}" ` +
+               `title="Drag a result here${s ? " to replace" : ""}">` +
+               `<span class="slot-letter">${i === 0 ? "A" : "B"}</span>` +
+               `<span class="slot-copy">${s ? `<b>${esc(s.entities)}</b>` : `<b>Add a location</b><small>Drag here</small>`}</span>` +
+               `<span class="slot-action">${s ? "✓" : "+"}</span></button>`;
+    };
 
-    t.innerHTML = `<div class="tray-text" title="${esc(fullTitle)}">${text}</div>` +
-        `<button class="btn" id="goCmp" ${selected.length < 2 ? "disabled" : ""}>Compare</button>` +
-        `<button class="btn tray-clr" id="clrCmp">Clear</button>`;
-        
+    t.innerHTML =
+        `<div class="tray-head"><div>` +
+          `<span class="tray-title">Compare prices</span>` +
+          `<span class="tray-count">${selected.length}/2 selected</span>` +
+        `</div><button type="button" class="tray-x" id="clrCmp" title="Clear selection" ${selected.length ? "" : "disabled"}>×</button></div>` +
+        `<div class="tray-slots">${slot(0)}${slot(1)}</div>` +
+        `<button class="btn tray-go" id="goCmp" ${selected.length < 2 ? "disabled" : ""}>Compare selected <span>→</span></button>` +
+        `<div class="tray-tip">Drag a result into A or B, or use the compare buttons.</div>`;
+
     $("clrCmp").onclick = () => { selected = []; drawTray(); markCompare(); };
     $("goCmp").onclick = showCompare;
+    t.querySelectorAll(".tray-slot").forEach(btn => {
+        btn.addEventListener("dragover", e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            btn.classList.add("drop-target");
+        });
+
+        btn.addEventListener("dragleave", () => btn.classList.remove("drop-target"));
+
+        btn.addEventListener("drop", e => {
+            e.preventDefault();
+            btn.classList.remove("drop-target");
+            const id = readDragId(e);
+            if (id != null && props[id]) setCompareSlot(Number(btn.dataset.slot), props[id]);
+        });
+    });
 }
 
 async function showCompare() {
@@ -437,48 +910,59 @@ async function showCompare() {
     const d = await res.json(), A = d.a, B = d.b;
     const lo = (x, y) => (x != null && y != null && x < y) ? "cmp-cheaper" : "";
     
-    const formatDate = (dateStr) => {
-        if (!dateStr) return "";
-        const d = new Date(dateStr);
-        return isNaN(d) ? dateStr : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const renderStats = (X, Y) => {
+        let rows = `<div class="stat-row"><span>Items found</span> <b>${num(X.n_items)}</b></div>`;
+        if (X.n_comparable) {
+            rows += `<div class="stat-row"><span>Lowest /item (est.)</span> <b class="${lo(X.min_unit, Y.min_unit)}">${peso(X.min_unit)}</b></div>` +
+                    `<div class="stat-row"><span>Median /item (est.)</span> <b class="${lo(X.median_unit, Y.median_unit)}">${peso(X.median_unit)}</b></div>` +
+                    `<div class="stat-row"><span>Highest /item (est.)</span> <b class="${lo(X.max_unit, Y.max_unit)}">${peso(X.max_unit)}</b></div>`;
+            if (X.n_lots) {
+                rows += `<div class="stat-row stat-alt"><span>Lot totals</span> <b>${lotRange(X)}</b></div>`;
+            }
+        } else if (X.n_lots) {
+            rows += `<div class="stat-row"><span>Lowest lot</span> <b class="${lo(X.lot_min, Y.lot_min)}">${peso(X.lot_min)}</b></div>` +
+                    `<div class="stat-row"><span>Median lot</span> <b class="${lo(X.lot_median, Y.lot_median)}">${peso(X.lot_median)}</b></div>` +
+                    `<div class="stat-row"><span>Highest lot</span> <b class="${lo(X.lot_max, Y.lot_max)}">${peso(X.lot_max)}</b></div>` +
+                    `<div class="stat-note">Whole-lot budgets — not comparable per item.</div>`;
+        } else {
+            rows += `<div class="stat-note">No budget values available.</div>`;
+        }
+        return rows;
     };
 
 const renderLines = (X) => X.lines.length
         ? `<div class="cmp-table-wrap"><table>
-             <thead><tr><th>Item Details</th><th>Qty</th><th>Per Unit</th></tr></thead>
+             <thead><tr><th>Item Details</th><th>Qty</th><th>Indicative budget</th></tr></thead>
              <tbody>` +
              X.lines.slice(0, 10).map(l => `
                <tr>
                  <td>
-                   <div class="cmp-item-title">${esc(l.item)}</div>
+                   <div class="cmp-item-title">${esc(l.item || l.item_name)}</div>
+                   ${itemSubLabel(l) ? `<div class="cmp-line-meta">${esc(itemSubLabel(l))}</div>` : ""}
                    <!-- Awardee tag added right below the title -->
-                   ${l.awardee ? `<div style="font-size: 11px; color: var(--muted, #64748b); margin-top: 4px;"><strong>Supplier:</strong> ${esc(l.awardee)}</div>` : ""}
+                   ${l.awardee ? `<div class="cmp-supplier"><strong>Supplier:</strong> ${esc(l.awardee)}</div>` : ""}
                    <div class="cmp-meta-badges">
-                     ${l.award_id 
-                       ? `<a href="https://philgeps.gov.ph/Indexes/viewAwardNotice/${esc(l.award_id)}" target="_blank" rel="noopener noreferrer" class="ref-link" title="Click to view full details">
-                            <span class="ref">${esc(l.award_id)} ↗</span>
-                          </a>` 
-                       : `<span class="ref" style="cursor: help;" title="Bid Reference Number">${esc(l.bid_ref)}</span>`
-                     }
+                     ${refBadge(l.bid_ref, l.award_id)}
                      ${l.status ? `<span class="cmp-status-badge">${esc(l.status)}</span>` : ""}
                      ${l.published ? `<span class="cmp-date">${formatDate(l.published)}</span>` : ""}
                    </div>
                  </td>
                  <td class="num">${num(l.quantity)} ${esc(l.uom || "")}</td>
-                 <td class="num font-semibold">${l.comparable ? peso(l.unit_budget) : (l.item_budget != null ? peso(l.item_budget): "n/a")}</td>
+                 <td class="num price-cell">${linePrice(l)}</td>
                </tr>`).join("") +
              `</tbody></table></div>`
         : `<p class="cmp-empty">No matching contract line items found.</p>`;
 
     const c = $("cmp");
+    closeContractDrawer();
     c.hidden = false;
     c.innerHTML = `
         <div class="cmp-header">
-            <div style="flex: 0 0 80%;">
+            <div class="cmp-header-main">
                 <h2>Price Benchmark Comparison</h2>
                 <p class="cmp-subtitle">For: "${esc(itemQ)}"</p>
             </div>
-            <button class="btn ghost" id="closeCmp" style="flex: 0 0 20%; width: auto;">Close</button>
+            <button class="btn ghost close-cmp" id="closeCmp">Close</button>
         </div>
 
         <div class="cmp-grid">
@@ -487,10 +971,7 @@ const renderLines = (X) => X.lines.length
                 <h3>${esc(A.entities.join("; ") || "Location A")}</h3>
                 <p class="cmp-address">${esc(A.address || "No address listed")}</p>
                 <div class="cmp-stats">
-                    <div class="stat-row"><span>Items Found</span> <b>${num(A.n_items)}</b></div>
-                    <div class="stat-row"><span>Lowest Unit</span> <b class="${lo(A.min_unit, B.min_unit)}">${peso(A.min_unit)}</b></div>
-                    <div class="stat-row"><span>Median Unit</span> <b class="${lo(A.median_unit, B.median_unit)}">${peso(A.median_unit)}</b></div>
-                    <div class="stat-row"><span>Highest Unit</span> <b class="${lo(A.max_unit, B.max_unit)}">${peso(A.max_unit)}</b></div>
+                    ${renderStats(A, B)}
                 </div>
                 <h4 class="cmp-section-title">Recent Contract Entries</h4>
                 ${renderLines(A)}
@@ -501,24 +982,25 @@ const renderLines = (X) => X.lines.length
                 <h3>${esc(B.entities.join("; ") || "Location B")}</h3>
                 <p class="cmp-address">${esc(B.address || "No address listed")}</p>
                 <div class="cmp-stats">
-                    <div class="stat-row"><span>Items Found</span> <b>${num(B.n_items)}</b></div>
-                    <div class="stat-row"><span>Lowest Unit</span> <b class="${lo(B.min_unit, A.min_unit)}">${peso(B.min_unit)}</b></div>
-                    <div class="stat-row"><span>Median Unit</span> <b class="${lo(B.median_unit, A.median_unit)}">${peso(B.median_unit)}</b></div>
-                    <div class="stat-row"><span>Highest Unit</span> <b class="${lo(B.max_unit, A.max_unit)}">${peso(B.max_unit)}</b></div>
+                    ${renderStats(B, A)}
                 </div>
                 <h4 class="cmp-section-title">Recent Contract Entries</h4>
                 ${renderLines(B)}
             </div>
         </div>
         
-        <p class="cmp-note">Note: Per-unit prices reflect approved agency budget allocations divided by quantity, not final payouts.</p>
+        <p class="cmp-note"><span class="legend-key tag-unit">PER ITEM (EST.)</span> uses genuine line-item budgets. <span class="legend-key tag-lot">WHOLE LOT</span> is the full contract/lot budget and must not be read as a unit price. These are budgets, not amounts paid.</p>
     `;
 
     $("closeCmp").focus();
     $("closeCmp").onclick = () => { c.hidden = true; };
 }
 
-document.addEventListener("keydown", e => { if (e.key === "Escape") $("cmp").hidden = true; });
+document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    $("cmp").hidden = true;
+    closeContractDrawer();
+});
 
 
 // --- Initialization Call ---

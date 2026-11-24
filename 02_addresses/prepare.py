@@ -1,6 +1,10 @@
+import sys
+
 import pandas as pd
 
-df = pd.read_csv("ncr_it_awarded2.csv", dtype=str)
+# default: the contracts.csv written by 01_prepare/filter.py (or the notebook)
+src = sys.argv[1] if len(sys.argv) > 1 else "contracts.csv"
+df = pd.read_csv(src, dtype=str)
 
 BID = "Bid Reference No."
 AWARD = "Award Reference No."

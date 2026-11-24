@@ -25,11 +25,13 @@ CREATE TABLE IF NOT EXISTS contracts (
   award_no VARCHAR(40),
   awardee VARCHAR(255),       
   entity_id INT NULL,
-  title TEXT, unit VARCHAR(200),
+  title TEXT, unit VARCHAR(500),
   classification VARCHAR(100), category VARCHAR(150),
   abc DECIMAL(16,2),
+  budget DECIMAL(16,2),
   published DATE, status VARCHAR(60),
-  UNIQUE KEY uq_bid_ref (bid_ref),
+  KEY idx_con_bid_ref (bid_ref),
+  UNIQUE KEY uq_contract_award (bid_ref, award_no),
   KEY idx_con_ent (entity_id),
   KEY idx_con_published (published),
   FOREIGN KEY (entity_id) REFERENCES entities(id)
@@ -38,11 +40,13 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE TABLE IF NOT EXISTS items (
   id INT AUTO_INCREMENT PRIMARY KEY,
   bid_ref VARCHAR(40) NOT NULL,
+  award_no VARCHAR(40),
   item_name VARCHAR(500),
   item_desc TEXT,
   quantity DECIMAL(18,4),
   uom VARCHAR(60),
   item_budget DECIMAL(18,2),
   KEY idx_item_bid (bid_ref),
+  KEY idx_item_bid_award (bid_ref, award_no),
   KEY idx_item_name (item_name(100))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

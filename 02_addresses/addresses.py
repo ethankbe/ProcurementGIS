@@ -1,3 +1,5 @@
+import argparse
+
 import requests, time, json, pathlib
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -40,9 +42,11 @@ def parse_entity(html, bid_ref):
             awardee,
             ref_match)
 
+ap = argparse.ArgumentParser(description="Fetch agency addresses from PhilGEPS award notices.")
+ap.add_argument("--limit", type=int, help="stop after this many offices (for testing)")
+args = ap.parse_args()
+
 targets = pd.read_csv("targets.csv", dtype=str)     # office_key, bid_ref, award_ref
-# for testing, uncomment the next line:
-# targets = targets.head(10)
 
 # award numbers found by scrape.py (bid-ref search), if you ran it
 lookup = {}
@@ -54,13 +58,23 @@ if p.exists():
             lookup[d["bid_ref"]] = d["hits"][0]["award_no"]
 
 out_path = pathlib.Path("addresses_raw.jsonl")
-done = {json.loads(l)["office_key"] for l in out_path.open()} if out_path.exists() else set()
+# offices already resolved are skipped; failed ones are retried on the next run
+RESOLVED = {"ok", "no_address", "check_ref_mismatch"}
+done = set()
+if out_path.exists():
+    for l in out_path.open():
+        d = json.loads(l)
+        if d.get("status") in RESOLVED:
+            done.add(d["office_key"])
+
+todo = [t for _, t in targets.iterrows() if t.office_key not in done]
+if args.limit:
+    todo = todo[:args.limit]
+print("%d offices to fetch (%d already done); ~4s each" % (len(todo), len(done)), flush=True)
 
 try:
     with out_path.open("a") as out:
-        for _, t in targets.iterrows():
-            if t.office_key in done:
-                continue
+        for i, t in enumerate(todo, 1):
             award_no = t.award_ref if pd.notna(t.award_ref) and t.award_ref else lookup.get(t.bid_ref)
             # Added "awardee": None to the default row
             row = {"office_key": t.office_key, "bid_ref": t.bid_ref, "award_no": award_no,
@@ -69,7 +83,17 @@ try:
             if not award_no:
                 row["status"] = "no_award_no"
             else:
-                html = fetch_record(award_no)
+                html = None
+                for attempt in range(4):
+                    try:
+                        html = fetch_record(award_no)
+                        break
+                    except Blocked as e:
+                        wait = 60 * (2 ** attempt)
+                        print("  got %s, waiting %ds before retry %d/4" % (e, wait, attempt + 1))
+                        time.sleep(wait)
+                else:
+                    raise Blocked("still blocked after 4 tries")
                 if not html:
                     row["status"] = "fetch_failed"
                 else:
@@ -83,5 +107,6 @@ try:
                         row["status"] = "check_ref_mismatch"
             out.write(json.dumps(row) + "\n")
             out.flush()
+            print("[%d/%d] %s -> %s" % (i, len(todo), t.office_key[:60], row["status"]), flush=True)
 except Blocked as e:
     print("STOPPED, got", e, ". Wait a few hours before trying again.")
