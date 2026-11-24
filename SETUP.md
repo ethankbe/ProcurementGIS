@@ -60,6 +60,9 @@ addresses, coordinates, and summaries come from the committed files.
 If your MySQL user/database differs, also set `DB_HOST`, `DB_USER`, and
 `DB_NAME` before running `load.py`.
 
+`ARCGIS_API_KEY` is not needed for this path; the coordinates are already in
+the committed CSVs.
+
 ## 3b. If you need a fresh database
 
 Create the database once:

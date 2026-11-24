@@ -41,6 +41,42 @@ GRANT ALL ON philgeps.* TO 'philgeps_app'@'localhost';
 
 Never commit passwords. Each person sets their own with `export DB_PASS='...'`.
 
+### Updating an existing database (front-end-v2)
+
+If you already have the old database, do **not** recreate it. Stop the old
+server, then switch to the new branch and reload the committed data:
+
+```bash
+git fetch origin
+git checkout front-end-v2
+git pull origin front-end-v2
+
+source venv/bin/activate
+python -m pip install -r requirements.txt
+
+export DB_PASS='your-own-password'
+cd 04_database
+python load.py
+```
+
+`load.py` upgrades the older schema automatically: it adds the newer columns,
+switches contracts to one row per `(bid_ref, award_no)`, rebuilds the item
+lines, and removes stale contract rows. It is safe to re-run.
+
+`ARCGIS_API_KEY` is **not** needed here. The coordinates are already committed
+in `03_geocode/geocoded_addresses.csv`. It is only needed if someone rebuilds
+geocoding with `pipeline.py`.
+
+Restart the app afterwards:
+
+```bash
+cd ../05_app
+export DB_PASS='your-own-password'
+python -m uvicorn main:app --reload
+```
+
+Hard-refresh the browser after restarting.
+
 ## Run order
 
 ### One command (recommended)
