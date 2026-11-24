@@ -125,6 +125,14 @@ button, input, select {
     display: none !important;
 }
 
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+    transition: none !important;
+    animation: none !important;
+}
+
 .sr-only {
     position: absolute;
     width: 1px;

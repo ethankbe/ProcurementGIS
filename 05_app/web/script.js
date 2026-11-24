@@ -382,7 +382,16 @@ const THEME_ICONS = {
 };
 
 function applyTheme(theme) {
-    document.documentElement.dataset.theme = theme;
+    const root = document.documentElement;
+    root.classList.add("theme-switching");
+    root.dataset.theme = theme;
+
+    // Force immediate style recalculation before re-enabling transitions
+    void root.offsetWidth;
+    requestAnimationFrame(() => {
+        root.classList.remove("theme-switching");
+    });
+
     if (!themeBtn) return;
     themeBtn.innerHTML = THEME_ICONS[theme];
     themeBtn.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
