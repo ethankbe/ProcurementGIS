@@ -148,11 +148,22 @@
                     <summary>Agency &amp; record</summary>
                     <div class="filter-body">
                         <label for="q">Agency</label>
-                        <div class="ac-anchor">
-                            <input id="q" class="agency-select-input" type="search"
-                                   placeholder="Type or select an agency" autocomplete="off">
-                            <datalist id="agencylist"></datalist>
-                        </div>
+<div class="ac-anchor">
+    <div class="search-input-wrapper">
+        <input id="q" class="agency-select-input" type="search"
+               placeholder="Type or select an agency" autocomplete="off">
+        <button type="button" id="clear-agency" class="clear-search-btn"
+                title="Clear agency filter" aria-label="Clear agency filter" hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+    <datalist id="agencylist"></datalist>
+</div>
 
                         <label for="f-category">Category</label>
                         <select id="f-category"></select>
@@ -320,16 +331,39 @@
     syncReset();
 
     // 2. Compact styled autocomplete with Title Case (max 6 items; stays closed after selection)
+    // 2. Compact styled autocomplete with Title Case (scrollable for agency; stays closed after selection)
     function attachAutocomplete(inputId, listId, maxItems) {
         var input = document.getElementById(inputId);
         var datalist = document.getElementById(listId);
         if (!input || !datalist) return;
 
+        var clearAgencyBtn = inputId === 'q' ? document.getElementById('clear-agency') : null;
+
+        function syncClearBtn() {
+            if (!clearAgencyBtn) return;
+            var hasVal = input.value.trim() !== '';
+            input.classList.toggle('has-value', hasVal);
+            clearAgencyBtn.hidden = !hasVal;
+        }
+
+        if (clearAgencyBtn) {
+            clearAgencyBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                input.value = '';
+                lastSelectedValue = null;
+                syncClearBtn();
+                closeMenu();
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                input.focus();
+            });
+        }
+
         var menu = document.createElement('ul');
         menu.className = 'ac-menu';
         menu.setAttribute('role', 'listbox');
         menu.hidden = true;
-        input.parentNode.appendChild(menu);
+        input.closest('.ac-anchor').appendChild(menu);
 
         var activeIdx = -1;
         var currentMatches = [];
@@ -344,12 +378,14 @@
             var formatted = toTitleCase(val);
             lastSelectedValue = formatted;
             input.value = formatted;
+            syncClearBtn();
             closeMenu();
             input.dispatchEvent(new Event('input', { bubbles: true }));
             input.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         function renderMenu() {
+            syncClearBtn();
             if (lastSelectedValue !== null && input.value === lastSelectedValue) {
                 closeMenu();
                 return;
@@ -365,7 +401,9 @@
                 ? all.filter(function (v) { return v.toLowerCase().indexOf(q) !== -1; })
                 : all;
 
-            currentMatches = currentMatches.slice(0, maxItems);
+            if (maxItems && maxItems > 0) {
+                currentMatches = currentMatches.slice(0, maxItems);
+            }
             menu.innerHTML = '';
             activeIdx = -1;
 
@@ -429,7 +467,19 @@
                 closeMenu();
             }
         });
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function () {
+                setTimeout(function () {
+                    lastSelectedValue = null;
+                    syncClearBtn();
+                }, 0);
+            });
+        }
+
+        syncClearBtn();
     }
+
 
     attachAutocomplete('item', 'itemlist', 6);
     attachAutocomplete('q', 'agencylist', 6);

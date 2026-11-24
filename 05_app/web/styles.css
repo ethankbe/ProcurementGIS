@@ -707,6 +707,35 @@ select,
     background-size: 12px 12px;
 }
 
+/* Replace dropdown arrow with × in the exact same position once #q has a value */
+#q.agency-select-input.has-value,
+[data-theme="dark"] #q.agency-select-input.has-value {
+    background-image: none;
+    padding-right: 32px;
+}
+
+#q.agency-select-input + #clear-agency {
+    right: 12px;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--muted);
+}
+
+#q.agency-select-input + #clear-agency:hover {
+    background: transparent;
+    color: var(--ink);
+}
+
+.ac-menu {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
 select {
     cursor: pointer;
 }
