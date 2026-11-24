@@ -701,7 +701,9 @@ const contractCard = c => {
     const derived = c.derived
         ? `<small class="derived-note" title="Budget comes from the item lines, not a copied whole-lot ABC">from items</small>`
         : "";
-    const meta = [smartCase(c.status), formatDate(c.published)].filter(Boolean).map(esc).join(" · ");
+    // const meta = [smartCase(c.status), formatDate(c.published)].filter(Boolean).map(esc).join(" · ");
+    const pub = formatDate(c.published);
+    const meta = pub ? `Published ${esc(pub)}` : "";
     return `<article class="drawer-contract">
               <div class="dc-head">
                 <div>${refBadge(c.bid_ref, c.award_id)}</div>
@@ -1440,8 +1442,8 @@ async function showCompare() {
     const renderLines = X => X.lines.length
         ? `<div class="cmp-entries">` +
             X.lines.slice(0, 10).map(l => {
-                const meta = [smartCase(l.status), formatDate(l.published)]
-                    .filter(Boolean).map(esc).join(" · ");
+            const pub = formatDate(c.published);
+            const meta = pub ? `Published ${esc(pub)}` : "";
                 const headlinePrice = l.comparable
                     ? peso(l.unit_budget)
                     : (l.item_budget != null ? peso(l.item_budget) : "n/a");

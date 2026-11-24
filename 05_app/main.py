@@ -62,8 +62,8 @@ def filter_sql(f):
 
 
 def contract_budget_expr(line_bids=None):
-    """Per-award budget computed at load time; fall back for older databases."""
-    return "COALESCE(c.budget, c.abc, ib.total)", []
+    """Per-award budget computed at load time; fall back to item sum when 0/NULL."""
+    return "COALESCE(NULLIF(c.budget, 0), NULLIF(c.abc, 0), ib.total, 0)", []
 
 
 @app.get("/api/filters")
@@ -87,11 +87,12 @@ def filters():
         if r["name"]:
             agencies[r["name"]] = {"name": r["name"], "city": r["city"],
                                    "province": r["province"], "region": r["region"]}
+
     def tally(col):
         return [{"name": x["name"], "n": int(x["n"])} for x in query(
             "SELECT %s AS name, COUNT(*) AS n FROM contracts WHERE %s IS NOT NULL AND %s <> '' "
             "GROUP BY %s ORDER BY n DESC" % (col, col, col, col))]
-            
+
     # --- Fetch the latest published date ---
     date_res = query("SELECT DATE_FORMAT(MAX(published), '%%M %%e, %%Y') AS max_date FROM contracts WHERE published IS NOT NULL")
     latest_date = date_res[0]["max_date"] if date_res and date_res[0]["max_date"] else "Unknown Date"
@@ -102,7 +103,7 @@ def filters():
         "cities": [{"name": k[0], "province": k[1], "region": k[2], "n": n} for k, n in sorted(cities.items(), key=lambda i: str(i[0]))],
         "agencies": sorted(agencies.values(), key=lambda a: a["name"]),
         "categories": tally("category"), "statuses": tally("status"),
-        "last_updated": latest_date 
+        "last_updated": latest_date
     }
 
 
@@ -151,6 +152,60 @@ def pins(q: str | None = None, min_budget: float = 0, max_budget: float | None =
         for r in rows]}
 
 
+def independent_line_budgets(item_rows, contract_abcs):
+    """Return set of (key, idx) entries whose line budgets look genuinely
+    broken out per item rather than shared/lump/missing across lines."""
+    grouped = {}
+    for idx, ir in enumerate(item_rows):
+        key = (ir["bid_ref"], ir["award_no"])
+        grouped.setdefault(key, []).append((idx, ir))
+
+    independent = set()
+    for key, entries in grouped.items():
+        if len(entries) <= 1:
+            continue
+
+        buds = []
+        valid = True
+        for _, ir in entries:
+            b = float(ir["item_budget"]) if ir["item_budget"] is not None else 0.0
+            if b <= 0:
+                valid = False
+                break
+            buds.append(b)
+        if not valid:
+            continue
+
+        c_abc = contract_abcs.get(key)
+        total_lines = sum(buds)
+        distinct_buds = {round(b, 2) for b in buds}
+
+        sums_to_abc = (
+            c_abc is not None
+            and c_abc > 0
+            and abs(total_lines - c_abc) <= max(1.0, abs(c_abc) * 0.01)
+        )
+        varied_and_plausible = (
+            len(distinct_buds) > 1
+            and (c_abc is None or c_abc <= 0 or total_lines <= c_abc * 1.01)
+        )
+
+        if not (sums_to_abc or varied_and_plausible):
+            continue
+
+        for idx, ir in entries:
+            b = float(ir["item_budget"])
+            matches_full_abc = (
+                c_abc is not None
+                and c_abc > 0
+                and abs(b - c_abc) <= max(1.0, abs(c_abc) * 0.01)
+            )
+            if not matches_full_abc:
+                independent.add((key, idx))
+
+    return independent
+
+
 @app.get("/api/pins/{address_id}/contracts")
 def contracts(address_id: int, limit: int = Query(50, le=200), offset: int = 0,
               details: bool = False, f: dict = Depends(filter_params)):
@@ -159,23 +214,26 @@ def contracts(address_id: int, limit: int = Query(50, le=200), offset: int = 0,
     extra = "".join(" AND " + x for x in fc)
     budget_expr, budget_args = contract_budget_expr()
     rows = query(f"""
-      SELECT c.bid_ref, c.award_no, c.title, c.unit, {budget_expr} AS abc,
-             ((c.budget IS NOT NULL AND c.budget <> c.abc)
-              OR (c.abc IS NULL AND ib.total IS NOT NULL)) AS derived,
-             c.published, c.status, c.awardee, e.name
-      FROM contracts c JOIN entities e ON e.id = c.entity_id
-      LEFT JOIN (SELECT bid_ref, award_no, SUM(item_budget) AS total
-                 FROM items GROUP BY bid_ref, award_no) ib
-             ON ib.bid_ref = c.bid_ref AND ib.award_no <=> c.award_no
-      WHERE e.address_id = %s""" + extra +
-      " ORDER BY c.published DESC, c.bid_ref DESC, c.award_no DESC LIMIT %s OFFSET %s",
-      budget_args + [address_id] + fa + [limit, offset])
+    SELECT c.bid_ref, c.award_no, c.title, c.unit, c.abc, c.budget,
+            {budget_expr} AS display_abc,
+            ((COALESCE(c.budget, 0) > 0 AND COALESCE(c.budget, 0) <> COALESCE(c.abc, 0))
+            OR (COALESCE(c.abc, 0) = 0 AND COALESCE(ib.total, 0) > 0)) AS derived,
+            c.published, c.status, c.awardee, e.name
+    FROM contracts c JOIN entities e ON e.id = c.entity_id
+    LEFT JOIN (SELECT bid_ref, award_no, SUM(item_budget) AS total
+                FROM items GROUP BY bid_ref, award_no) ib
+            ON ib.bid_ref = c.bid_ref AND ib.award_no <=> c.award_no
+    WHERE e.address_id = %s""" + extra +
+    " ORDER BY c.published DESC, c.bid_ref DESC, c.award_no DESC LIMIT %s OFFSET %s",
+    budget_args + [address_id] + fa + [limit, offset])
 
-    out = [{**r, "abc": float(r["abc"]) if r["abc"] is not None else None,
+    out = [{**r, "abc": float(r["display_abc"]) if r["display_abc"] is not None else None,
+            "raw_abc": float(r["abc"]) if r["abc"] is not None else None,
+            "raw_budget": float(r["budget"]) if r["budget"] is not None else None,
             "derived": bool(r["derived"]),
             "award_id": r["award_no"], "awardee": r["awardee"],
             "published": str(r["published"]) if r["published"] else None}
-           for r in rows]
+        for r in rows]
 
     if details and out:
         pairs = [(r["bid_ref"], r["award_no"]) for r in out]
@@ -187,18 +245,53 @@ def contracts(address_id: int, limit: int = Query(50, le=200), offset: int = 0,
           ORDER BY i.bid_ref, i.award_no, i.id
         """, [v for pair in pairs for v in pair])
         line_bids = line_item_bids()
+        total_counts = bid_item_count_map()
         titles = {(r["bid_ref"], r["award_no"]): r["title"] for r in out}
+        contract_abcs = {
+            (r["bid_ref"], r["award_no"]): (
+                r["raw_budget"] if (r["raw_budget"] is not None and r["raw_budget"] > 0)
+                else r["raw_abc"]
+            )
+            for r in out
+        }
+        independent_lines = independent_line_budgets(item_rows, contract_abcs)
+
         by_key = {}
-        for ir in item_rows:
+        for idx, ir in enumerate(item_rows):
             qty = float(ir["quantity"]) if ir["quantity"] is not None else None
             bud = float(ir["item_budget"]) if ir["item_budget"] is not None else None
             uom = (ir["uom"] or "").strip().lower()
             name = clean_text(ir["item_name"])
             desc = clean_text(ir["item_desc"])
-            bundled = bool(BUNDLE_TERMS.search(f"{name} {desc}"))
-            comparable = bool(ir["bid_ref"] in line_bids and qty and qty > 0 and bud is not None
-                              and uom not in NON_UNIT and not bundled)
+
+            has_unit_qty = (
+                qty is not None and qty > 0
+                and bud is not None and bud > 0
+                and uom not in NON_UNIT
+            )
+            bundled = False if (uom in UNIT_UOMS and has_unit_qty) else bool(BUNDLE_TERMS.search(f"{name} {desc}"))
+
             key = (ir["bid_ref"], ir["award_no"])
+            bid_item_count = total_counts.get(key, 1)
+            contract_abc = contract_abcs.get(key)
+
+            has_multi_lines = bid_item_count > 1
+            matches_full_abc = (
+                contract_abc is not None
+                and contract_abc > 0
+                and bud is not None
+                and abs(bud - contract_abc) <= max(1.0, abs(contract_abc) * 0.01)
+            )
+            is_shared_lot_budget = has_multi_lines and matches_full_abc
+            multi_line_ok = (not has_multi_lines) or ((key, idx) in independent_lines)
+
+            comparable = bool(
+                has_unit_qty
+                and not bundled
+                and not is_shared_lot_budget
+                and multi_line_ok
+                and (uom in UNIT_UOMS or ir["bid_ref"] in line_bids)
+            )
             primary, secondary = best_item_label(name, desc, titles.get(key, ""))
             by_key.setdefault(key, []).append({
                 "item": primary,
@@ -603,23 +696,45 @@ def device_query_text(q, groups):
 
 
 _line_bids = {"at": 0, "ids": set()}
+_bid_item_counts = {"at": 0, "counts": {}}
+
+
+UNIT_UOMS = {"unit", "units"}
+
+
+def bid_item_count_map():
+    """Total number of item lines per (bid_ref, award_no) across the whole contract."""
+    if time.time() - _bid_item_counts["at"] < 60:
+        return _bid_item_counts["counts"]
+    rows = query("""SELECT bid_ref, award_no, COUNT(*) AS n
+                    FROM items
+                    GROUP BY bid_ref, award_no""")
+    counts = {(r["bid_ref"], r["award_no"]): int(r["n"]) for r in rows}
+    _bid_item_counts.update(at=time.time(), counts=counts)
+    return counts
 
 
 def line_item_bids():
     """Bids whose item budgets are real per-line budgets, not the whole contract
-    budget copied onto every row. A line budget exists when several item rows
-    add up to the contract ABC (or a single row is smaller than the ABC).
-    Cached briefly; refresh happens automatically after a DB reload."""
+    budget copied onto every row."""
     if time.time() - _line_bids["at"] < 60:
         return _line_bids["ids"]
     rows = query("""SELECT i.bid_ref, COUNT(*) AS n, SUM(i.item_budget) AS total,
-                           MAX(c.abc) AS abc
+                           MAX(c.abc) AS abc,
+                           MAX(LOWER(TRIM(COALESCE(i.uom, '')))) AS single_uom,
+                           MAX(i.quantity) AS single_qty
                     FROM items i JOIN contracts c
                       ON c.bid_ref = i.bid_ref AND c.award_no <=> i.award_no
                     GROUP BY i.bid_ref""")
     ids = set()
     for r in rows:
         total, abc = r["total"], r["abc"]
+        if r["n"] == 1:
+            uom = (r.get("single_uom") or "").strip().lower()
+            qty = r.get("single_qty")
+            if uom in UNIT_UOMS and qty is not None and float(qty) > 0:
+                ids.add(r["bid_ref"])
+                continue
         if total is None or abc is None:
             continue
         tol = max(1.0, abs(float(abc)) * 0.01)
@@ -652,6 +767,7 @@ def fetch_rows(q, address_ids=None, filters=None, min_budget=0, max_budget=None)
         device_alt = sorted(alts & DEVICE_TERMS) or None
         query_accessories = accessory_set(device_q)
     line_bids = line_item_bids()
+    total_counts = bid_item_count_map()
     where = ["a.lat IS NOT NULL", clause]
 
     if min_budget > 0:
@@ -670,7 +786,7 @@ def fetch_rows(q, address_ids=None, filters=None, min_budget=0, max_budget=None)
         args = args + list(address_ids)
     rows = query("""
       SELECT i.bid_ref, i.item_name, i.item_desc, i.quantity, i.uom, i.item_budget,
-             c.title, c.published, c.status, c.award_no, c.awardee,
+             c.title, c.abc, c.budget, c.published, c.status, c.award_no, c.awardee,
              e.name AS entity, e.region AS region,
              a.id AS address_id, a.clean_address AS address,
              a.lat, a.lon, a.geo_precision AS `precision`
@@ -680,18 +796,84 @@ def fetch_rows(q, address_ids=None, filters=None, min_budget=0, max_budget=None)
       JOIN addresses a ON a.id = e.address_id
       WHERE """ + " AND ".join(where) + " ORDER BY c.published DESC LIMIT %s",
       args + [ROW_LIMIT + 1])
-    
+
     truncated = len(rows) > ROW_LIMIT
+    trimmed_rows = rows[:ROW_LIMIT]
+
+    # Fetch all item lines for the matching contracts so multi-line budget checks
+    # see sibling rows even when filters or row limits trimmed the result set.
+    matched_pairs = sorted({(r["bid_ref"], r["award_no"]) for r in trimmed_rows})
+    all_contract_items = []
+    if matched_pairs:
+        pair_where = " OR ".join("(i.bid_ref = %s AND i.award_no <=> %s)" for _ in matched_pairs)
+        all_contract_items = query(f"""
+          SELECT i.bid_ref, i.award_no, i.item_budget
+          FROM items i
+          WHERE {pair_where}
+          ORDER BY i.bid_ref, i.award_no, i.id
+        """, [v for pair in matched_pairs for v in pair])
+
+    contract_abcs = {}
+    for r in trimmed_rows:
+        key = (r["bid_ref"], r["award_no"])
+        if key not in contract_abcs:
+            raw_bud = float(r["budget"]) if r["budget"] is not None else None
+            raw_abc = float(r["abc"]) if r["abc"] is not None else None
+            contract_abcs[key] = raw_bud if (raw_bud is not None and raw_bud > 0) else raw_abc
+
+    independent_by_key = {}
+    for (k, _), _ in independent_line_budgets(all_contract_items, contract_abcs):
+        independent_by_key.setdefault(k, set())
+    # Re-index independent budgets per (bid_ref, award_no) by item_budget value
+    grouped_all = {}
+    for ir in all_contract_items:
+        grouped_all.setdefault((ir["bid_ref"], ir["award_no"]), []).append(ir)
+    for key, entries in grouped_all.items():
+        if len(entries) <= 1:
+            continue
+        buds = []
+        valid = True
+        for ir in entries:
+            b = float(ir["item_budget"]) if ir["item_budget"] is not None else 0.0
+            if b <= 0:
+                valid = False
+                break
+            buds.append(b)
+        if not valid:
+            continue
+        c_abc = contract_abcs.get(key)
+        total_lines = sum(buds)
+        distinct_buds = {round(b, 2) for b in buds}
+        sums_to_abc = (
+            c_abc is not None
+            and c_abc > 0
+            and abs(total_lines - c_abc) <= max(1.0, abs(c_abc) * 0.01)
+        )
+        varied_and_plausible = (
+            len(distinct_buds) > 1
+            and (c_abc is None or c_abc <= 0 or total_lines <= c_abc * 1.01)
+        )
+        if sums_to_abc or varied_and_plausible:
+            ok_buds = set()
+            for ir in entries:
+                b = float(ir["item_budget"])
+                matches_full_abc = (
+                    c_abc is not None
+                    and c_abc > 0
+                    and abs(b - c_abc) <= max(1.0, abs(c_abc) * 0.01)
+                )
+                if not matches_full_abc:
+                    ok_buds.add(round(b, 2))
+            if ok_buds:
+                independent_by_key[key] = ok_buds
+
     out = []
-    for r in rows[:ROW_LIMIT]:
+    for r in trimmed_rows:
         name = clean_text(r["item_name"])
         desc = clean_text(r["item_desc"])
         item_text = f"{name} {desc}"
         if not matches(item_text, r["title"] or ""):
             continue
-        # "computer" should find computers, not RJ45 connectors, speakers,
-        # monitors or TVs. Check the head of each label; specifications often
-        # list included peripherals further down.
         if device_q and not device_has_accessory and accessory_head(name, desc):
             continue
         if device_q and not device_has_accessory and device_alt and not device_head_ok(
@@ -699,8 +881,6 @@ def fetch_rows(q, address_ids=None, filters=None, min_budget=0, max_budget=None)
             continue
         if device_alt:
             lead160 = norm_term(f"{name} {desc[:160]}")
-            # "laptop charger" must actually name the charger in the product
-            # label, not merely list one among the inclusions further down.
             if query_accessories and not query_accessories.issubset(
                     accessory_set(lead160)):
                 continue
@@ -717,12 +897,42 @@ def fetch_rows(q, address_ids=None, filters=None, min_budget=0, max_budget=None)
                     for alt in starts)
                 if not starts_with_query:
                     continue
+
         qty = float(r["quantity"]) if r["quantity"] is not None else None
         bud = float(r["item_budget"]) if r["item_budget"] is not None else None
         uom = (r["uom"] or "").strip().lower()
-        bundled = bool(BUNDLE_TERMS.search(f"{name} {desc}"))
-        comparable = bool(r["bid_ref"] in line_bids and qty and qty > 0 and bud is not None
-                          and uom not in NON_UNIT and not bundled)
+
+        has_unit_qty = (
+            qty is not None and qty > 0
+            and bud is not None and bud > 0
+            and uom not in NON_UNIT
+        )
+        bundled = False if (uom in UNIT_UOMS and has_unit_qty) else bool(BUNDLE_TERMS.search(f"{name} {desc}"))
+
+        key = (r["bid_ref"], r["award_no"])
+        contract_abc = contract_abcs.get(key)
+        bid_item_count = total_counts.get(key, 1)
+
+        has_multi_lines = bid_item_count > 1
+        matches_full_abc = (
+            contract_abc is not None
+            and contract_abc > 0
+            and bud is not None
+            and abs(bud - contract_abc) <= max(1.0, abs(contract_abc) * 0.01)
+        )
+        is_shared_lot_budget = has_multi_lines and matches_full_abc
+        multi_line_ok = (
+            (not has_multi_lines)
+            or (bud is not None and round(bud, 2) in independent_by_key.get(key, set()))
+        )
+
+        comparable = bool(
+            has_unit_qty
+            and not bundled
+            and not is_shared_lot_budget
+            and multi_line_ok
+            and (uom in UNIT_UOMS or r["bid_ref"] in line_bids)
+        )
 
         primary, secondary = best_item_label(name, desc, r["title"])
         out.append({
@@ -842,8 +1052,8 @@ def price_summaries(rows):
 
 
 @app.get("/api/items/pins")
-def item_pins(q: str = Query(..., min_length=2, max_length=200), 
-              min_budget: float = 0, max_budget: float = 10000000, 
+def item_pins(q: str = Query(..., min_length=2, max_length=200),
+              min_budget: float = 0, max_budget: float = 10000000,
               f: dict = Depends(filter_params)):
     """Locations that bought items matching q, with per-location price stats."""
     rows, truncated = fetch_rows(q, None, f, min_budget, max_budget)
@@ -865,13 +1075,11 @@ def item_pins(q: str = Query(..., min_length=2, max_length=200),
 
 @app.get("/api/items/compare")
 def item_compare(q: str = Query(..., min_length=2, max_length=200), a: int = 0, b: int = 0,
-                 min_budget: float = 0, max_budget: float = 10000000, # <--- Added these!
+                 min_budget: float = 0, max_budget: float = 10000000,
                  f: dict = Depends(filter_params)):
     """Side-by-side price stats and item lines for two locations."""
-    
-    # Pass the budgets into fetch_rows so the comparison tray matches the map!
-    rows, truncated = fetch_rows(q, [a, b], f, min_budget, max_budget) 
-    
+    rows, truncated = fetch_rows(q, [a, b], f, min_budget, max_budget)
+
     result = {"truncated": truncated}
     for key, aid in (("a", a), ("b", b)):
         rs = sorted((r for r in rows if r["address_id"] == aid),
