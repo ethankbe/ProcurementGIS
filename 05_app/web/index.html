@@ -365,6 +365,18 @@
         menu.hidden = true;
         input.closest('.ac-anchor').appendChild(menu);
 
+        // Keep input focused when clicking/dragging the dropdown scrollbar
+        menu.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+        });
+
+        // Scroll the dropdown list itself instead of the outer sidebar
+        menu.addEventListener('wheel', function (e) {
+            if (menu.scrollHeight > menu.clientHeight) {
+                e.stopPropagation();
+            }
+        }, { passive: true });
+
         var activeIdx = -1;
         var currentMatches = [];
         var lastSelectedValue = null;
@@ -481,8 +493,8 @@
     }
 
 
-    attachAutocomplete('item', 'itemlist', 6);
-    attachAutocomplete('q', 'agencylist', 6);
+    attachAutocomplete('item', 'itemlist', 0);
+    attachAutocomplete('q', 'agencylist', 0);
 
     // 3. Apply Title Case to <select> option labels (keeps underlying option.value intact)
     function formatSelectOptions(sel) {

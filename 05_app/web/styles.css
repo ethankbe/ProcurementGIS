@@ -542,12 +542,14 @@ button, input, select {
     top: calc(100% + 5px);
     left: 0;
     right: 0;
-    z-index: 600;
+    z-index: 700;
     max-height: 210px;
     margin: 0;
     padding: 4px;
     list-style: none;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
     scrollbar-color: var(--line) transparent;
     border: 1px solid var(--line-strong);
