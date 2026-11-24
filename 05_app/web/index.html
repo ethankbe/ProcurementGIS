@@ -16,7 +16,7 @@
     </script>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
 
@@ -40,10 +40,13 @@
             </div>
         </div>
 
-        <div class="header-right">
+            <div class="header-right">
             <div class="header-meta" title="Most recent data from the csv">
                 <span>Data as of <strong id="last-updated">Loading…</strong></span>
             </div>
+            <button type="button" id="helpBtn" class="icon-btn"
+                    aria-label="About this website" aria-haspopup="dialog"
+                    title="About this website">?</button>
             <button type="button" id="themeToggle" class="icon-btn"
                     aria-label="Switch to dark mode" aria-pressed="false"
                     title="Switch to dark mode">☾</button>
@@ -241,6 +244,51 @@
             <ol id="list"></ol>
         </aside>
 
+    </div>
+</div>
+
+<!-- ===================== ABOUT / HELP MODAL ===================== -->
+<div id="helpModal" class="modal-backdrop" role="dialog" aria-modal="true"
+     aria-labelledby="helpModalTitle" hidden>
+    <div class="modal-card">
+        <div class="modal-head">
+            <div class="modal-title-group">
+                <span class="status-kicker">About this website</span>
+                <h2 id="helpModalTitle">Who Buys What? — PhilGEPS ICT Procurement Map</h2>
+            </div>
+            <button type="button" id="closeHelpBtn" class="modal-close"
+                    aria-label="Close help dialog" title="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2.4"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div class="modal-body">
+            <p class="modal-lead">
+                An interactive geographic information system (GIS) for Philippine government ICT procurement notices published on <strong>PhilGEPS</strong>.
+            </p>
+
+            <div class="help-grid">
+                <div class="help-item">
+                    <strong>EXPLORE BY AGENCY OR ITEMS</strong>
+                    <p>By default, you can pan around the map to see which government agencies are procuring across the Philippines, or use the search bar to look up specific items (like <em>laptop</em>, <em>printer</em>, or a Bid/Award ID) and check where they’re being bought.</p>
+                </div>
+
+                <div class="help-item">
+                    <strong>PRICE ANALYTICS AND COMPARISONS</strong>
+                    <p>Once you search for an item, you’ll see a quick price summary on the right with the lowest, median, and highest budgets (and sometimes green and red pins on the map for lowest or highest per-item budget)
+                    </p><p></p>
+                    <p>You can also click on any two cards to drag or add them to the comparison slots to compare their prices side by side.</p>
+                </div>
+                <div class="help-item">
+                    <strong>CLARIFICATION ON PER-ITEM VS WHOLE LOT</strong>
+                    <p>When a contract lists individual quantities, you’ll see a <em>Per-item (est.)</em> unit price. When items are bundled together without a unit breakdown, you’ll see the <em>Whole lot</em> total instead. Keep in mind that all figures shown are indicative budgets, not the final amounts paid.</p>
+                </div>
+            </div>
     </div>
 </div>
 

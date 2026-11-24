@@ -400,6 +400,33 @@ if (themeBtn) {
     });
 }
 
+// --- About / Help Modal ---
+const helpBtn = $("helpBtn");
+const helpModal = $("helpModal");
+const closeHelpBtn = $("closeHelpBtn");
+const closeHelpDone = $("closeHelpDone");
+
+function openHelpModal() {
+    if (!helpModal) return;
+    helpModal.hidden = false;
+    closeHelpBtn?.focus();
+}
+
+function closeHelpModal() {
+    if (!helpModal || helpModal.hidden) return;
+    helpModal.hidden = true;
+    helpBtn?.focus();
+}
+
+if (helpBtn) helpBtn.addEventListener("click", openHelpModal);
+if (closeHelpBtn) closeHelpBtn.addEventListener("click", closeHelpModal);
+if (closeHelpDone) closeHelpDone.addEventListener("click", closeHelpModal);
+if (helpModal) {
+    helpModal.addEventListener("click", e => {
+        if (e.target === helpModal) closeHelpModal();
+    });
+}
+
 
 // --- Map Initialization, Zoom Bounds & Soft-Halo Nodes ---
 const DEFAULT_VIEW = {
@@ -1496,6 +1523,7 @@ async function showCompare() {
 
 document.addEventListener("keydown", e => {
     if (e.key !== "Escape") return;
+    closeHelpModal();
     $("cmp").hidden = true;
     closeContractDrawer();
 });
